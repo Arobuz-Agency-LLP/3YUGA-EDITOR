@@ -1,0 +1,504 @@
+{
+  "textPresets": [
+    {
+      "id": "heading-bold-1",
+      "name": "Bold Heading",
+      "category": "heading",
+      "previewText": "Bold Heading",
+      "style": {
+        "fontSize": 120,
+        "fontFamily": "Inter",
+        "fontWeight": "bold",
+        "color": "#FFFFFF",
+        "textAlign": "center",
+        "letterSpacing": -2
+      },
+      "effect": {
+        "type": "shadow",
+        "color": "#000000",
+        "distance": 4,
+        "blur": 8,
+        "intensity": 0.5
+      },
+      "width": 800,
+      "wordWrap": "break-word",
+      "isPremium": false,
+      "tags": ["heading", "bold", "modern"]
+    },
+    {
+      "id": "heading-gradient-1",
+      "name": "Gradient Heading",
+      "category": "heading",
+      "previewText": "Gradient Text",
+      "style": {
+        "fontSize": 110,
+        "fontFamily": "Inter",
+        "fontWeight": "extrabold",
+        "color": "#FF6B6B",
+        "textAlign": "center",
+        "letterSpacing": -1
+      },
+      "effect": {
+        "type": "gradient",
+        "color": "#FF6B6B",
+        "secondaryColor": "#4ECDC4",
+        "angle": 45
+      },
+      "width": 800,
+      "wordWrap": "break-word",
+      "isPremium": true,
+      "tags": ["heading", "gradient", "colorful"]
+    },
+    {
+      "id": "heading-outline-1",
+      "name": "Outline Heading",
+      "category": "heading",
+      "previewText": "Outline Text",
+      "style": {
+        "fontSize": 130,
+        "fontFamily": "Inter",
+        "fontWeight": "black",
+        "color": "transparent",
+        "textAlign": "center",
+        "letterSpacing": -2
+      },
+      "effect": {
+        "type": "outline",
+        "borderWidth": 3,
+        "borderColor": "#FFFFFF"
+      },
+      "width": 900,
+      "wordWrap": "break-word",
+      "isPremium": false,
+      "tags": ["heading", "outline", "modern"]
+    },
+    {
+      "id": "subheading-modern-1",
+      "name": "Modern Subheading",
+      "category": "subheading",
+      "previewText": "Modern Subheading",
+      "style": {
+        "fontSize": 60,
+        "fontFamily": "Inter",
+        "fontWeight": "semibold",
+        "color": "#E0E0E0",
+        "textAlign": "center",
+        "letterSpacing": 1
+      },
+      "width": 700,
+      "wordWrap": "break-word",
+      "isPremium": false,
+      "tags": ["subheading", "modern", "clean"]
+    },
+    {
+      "id": "subheading-elegant-1",
+      "name": "Elegant Subheading",
+      "category": "subheading",
+      "previewText": "Elegant Subtitle",
+      "style": {
+        "fontSize": 55,
+        "fontFamily": "Playfair Display",
+        "fontWeight": "normal",
+        "color": "#D4AF37",
+        "textAlign": "center",
+        "letterSpacing": 2,
+        "fontStyle": "italic"
+      },
+      "width": 650,
+      "wordWrap": "break-word",
+      "isPremium": true,
+      "tags": ["subheading", "elegant", "luxury"]
+    },
+    {
+      "id": "body-clean-1",
+      "name": "Clean Body Text",
+      "category": "body",
+      "previewText": "Your message here",
+      "style": {
+        "fontSize": 40,
+        "fontFamily": "Inter",
+        "fontWeight": "normal",
+        "color": "#FFFFFF",
+        "textAlign": "left",
+        "lineHeight": 1.5
+      },
+      "width": 600,
+      "wordWrap": "break-word",
+      "isPremium": false,
+      "tags": ["body", "clean", "readable"]
+    },
+    {
+      "id": "modern-neon-1",
+      "name": "Neon Glow",
+      "category": "modern",
+      "previewText": "NEON GLOW",
+      "style": {
+        "fontSize": 100,
+        "fontFamily": "Inter",
+        "fontWeight": "bold",
+        "color": "#00FFFF",
+        "textAlign": "center",
+        "textTransform": "uppercase",
+        "letterSpacing": 3
+      },
+      "effect": {
+        "type": "neon",
+        "color": "#00FFFF",
+        "blur": 20,
+        "intensity": 1
+      },
+      "width": 800,
+      "wordWrap": "break-word",
+      "isPremium": true,
+      "tags": ["modern", "neon", "glow", "cyberpunk"]
+    },
+    {
+      "id": "modern-3d-1",
+      "name": "3D Text",
+      "category": "modern",
+      "previewText": "3D TEXT",
+      "style": {
+        "fontSize": 110,
+        "fontFamily": "Inter",
+        "fontWeight": "black",
+        "color": "#FF6B6B",
+        "textAlign": "center",
+        "textTransform": "uppercase",
+        "letterSpacing": 2
+      },
+      "effect": {
+        "type": "3d",
+        "color": "#C92A2A",
+        "distance": 8,
+        "angle": 135
+      },
+      "width": 800,
+      "wordWrap": "break-word",
+      "isPremium": true,
+      "tags": ["modern", "3d", "bold"]
+    },
+    {
+      "id": "elegant-script-1",
+      "name": "Elegant Script",
+      "category": "elegant",
+      "previewText": "Elegant Script",
+      "style": {
+        "fontSize": 90,
+        "fontFamily": "Dancing Script",
+        "fontWeight": "normal",
+        "color": "#FFD700",
+        "textAlign": "center",
+        "fontStyle": "italic"
+      },
+      "effect": {
+        "type": "glow",
+        "color": "#FFD700",
+        "blur": 15,
+        "intensity": 0.6
+      },
+      "width": 700,
+      "wordWrap": "break-word",
+      "isPremium": true,
+      "tags": ["elegant", "script", "luxury", "wedding"]
+    },
+    {
+      "id": "elegant-serif-1",
+      "name": "Classic Serif",
+      "category": "elegant",
+      "previewText": "Classic Elegance",
+      "style": {
+        "fontSize": 80,
+        "fontFamily": "Playfair Display",
+        "fontWeight": "bold",
+        "color": "#2C3E50",
+        "textAlign": "center",
+        "letterSpacing": 1
+      },
+      "width": 750,
+      "wordWrap": "break-word",
+      "isPremium": false,
+      "tags": ["elegant", "serif", "classic"]
+    },
+    {
+      "id": "bold-impact-1",
+      "name": "Impact Text",
+      "category": "bold",
+      "previewText": "IMPACT",
+      "style": {
+        "fontSize": 140,
+        "fontFamily": "Impact",
+        "fontWeight": "black",
+        "color": "#FFFFFF",
+        "textAlign": "center",
+        "textTransform": "uppercase",
+        "letterSpacing": 0
+      },
+      "effect": {
+        "type": "outline",
+        "borderWidth": 4,
+        "borderColor": "#000000"
+      },
+      "width": 850,
+      "wordWrap": "break-word",
+      "isPremium": false,
+      "tags": ["bold", "impact", "strong", "meme"]
+    },
+    {
+      "id": "bold-heavy-1",
+      "name": "Heavy Bold",
+      "category": "bold",
+      "previewText": "HEAVY BOLD",
+      "style": {
+        "fontSize": 120,
+        "fontFamily": "Inter",
+        "fontWeight": "black",
+        "color": "#FF4757",
+        "textAlign": "center",
+        "textTransform": "uppercase",
+        "letterSpacing": 3
+      },
+      "effect": {
+        "type": "shadow",
+        "color": "#000000",
+        "distance": 6,
+        "blur": 0,
+        "intensity": 1
+      },
+      "width": 900,
+      "wordWrap": "break-word",
+      "isPremium": false,
+      "tags": ["bold", "heavy", "strong"]
+    },
+    {
+      "id": "creative-playful-1",
+      "name": "Playful Text",
+      "category": "creative",
+      "previewText": "Playful Fun!",
+      "style": {
+        "fontSize": 85,
+        "fontFamily": "Comic Sans MS",
+        "fontWeight": "bold",
+        "color": "#FFA502",
+        "textAlign": "center"
+      },
+      "animation": {
+        "type": "bounce",
+        "duration": 800,
+        "easing": "ease-in-out"
+      },
+      "width": 650,
+      "wordWrap": "break-word",
+      "isPremium": false,
+      "tags": ["creative", "playful", "fun", "kids"]
+    },
+    {
+      "id": "creative-handwritten-1",
+      "name": "Handwritten",
+      "category": "creative",
+      "previewText": "Handwritten Style",
+      "style": {
+        "fontSize": 70,
+        "fontFamily": "Caveat",
+        "fontWeight": "normal",
+        "color": "#2C3E50",
+        "textAlign": "center"
+      },
+      "width": 700,
+      "wordWrap": "break-word",
+      "isPremium": true,
+      "tags": ["creative", "handwritten", "casual"]
+    },
+    {
+      "id": "minimal-thin-1",
+      "name": "Minimal Thin",
+      "category": "minimal",
+      "previewText": "minimal design",
+      "style": {
+        "fontSize": 65,
+        "fontFamily": "Inter",
+        "fontWeight": "light",
+        "color": "#FFFFFF",
+        "textAlign": "center",
+        "letterSpacing": 4,
+        "textTransform": "lowercase"
+      },
+      "width": 700,
+      "wordWrap": "break-word",
+      "isPremium": false,
+      "tags": ["minimal", "thin", "clean", "modern"]
+    },
+    {
+      "id": "minimal-caps-1",
+      "name": "Minimal Caps",
+      "category": "minimal",
+      "previewText": "MINIMAL CAPS",
+      "style": {
+        "fontSize": 55,
+        "fontFamily": "Inter",
+        "fontWeight": "medium",
+        "color": "#E0E0E0",
+        "textAlign": "center",
+        "letterSpacing": 8,
+        "textTransform": "uppercase"
+      },
+      "width": 800,
+      "wordWrap": "break-word",
+      "isPremium": false,
+      "tags": ["minimal", "caps", "spaced"]
+    },
+    {
+      "id": "premium-gold-1",
+      "name": "Gold Luxury",
+      "category": "premium",
+      "previewText": "LUXURY",
+      "style": {
+        "fontSize": 100,
+        "fontFamily": "Playfair Display",
+        "fontWeight": "bold",
+        "color": "#FFD700",
+        "textAlign": "center",
+        "letterSpacing": 5,
+        "textTransform": "uppercase"
+      },
+      "effect": {
+        "type": "glow",
+        "color": "#FFD700",
+        "blur": 25,
+        "intensity": 0.8
+      },
+      "width": 800,
+      "wordWrap": "break-word",
+      "isPremium": true,
+      "tags": ["premium", "gold", "luxury", "elegant"]
+    },
+    {
+      "id": "premium-diamond-1",
+      "name": "Diamond Shine",
+      "category": "premium",
+      "previewText": "DIAMOND",
+      "style": {
+        "fontSize": 95,
+        "fontFamily": "Inter",
+        "fontWeight": "black",
+        "color": "#E8F4F8",
+        "textAlign": "center",
+        "letterSpacing": 3,
+        "textTransform": "uppercase"
+      },
+      "effect": {
+        "type": "gradient",
+        "color": "#E8F4F8",
+        "secondaryColor": "#B8E6F0",
+        "angle": 90
+      },
+      "width": 800,
+      "wordWrap": "break-word",
+      "isPremium": true,
+      "tags": ["premium", "diamond", "shine", "luxury"]
+    },
+    {
+      "id": "social-instagram-1",
+      "name": "Instagram Style",
+      "category": "social",
+      "previewText": "Insta Ready",
+      "style": {
+        "fontSize": 75,
+        "fontFamily": "Inter",
+        "fontWeight": "bold",
+        "color": "#FFFFFF",
+        "textAlign": "center"
+      },
+      "effect": {
+        "type": "gradient",
+        "color": "#F58529",
+        "secondaryColor": "#DD2A7B",
+        "angle": 45
+      },
+      "width": 650,
+      "wordWrap": "break-word",
+      "isPremium": false,
+      "tags": ["social", "instagram", "trendy"]
+    },
+    {
+      "id": "social-tiktok-1",
+      "name": "TikTok Vibe",
+      "category": "social",
+      "previewText": "TikTok Text",
+      "style": {
+        "fontSize": 80,
+        "fontFamily": "Inter",
+        "fontWeight": "extrabold",
+        "color": "#00F2EA",
+        "textAlign": "center",
+        "textTransform": "uppercase"
+      },
+      "effect": {
+        "type": "shadow",
+        "color": "#FE2C55",
+        "distance": 3,
+        "blur": 0,
+        "intensity": 1
+      },
+      "animation": {
+        "type": "bounce",
+        "duration": 600
+      },
+      "width": 700,
+      "wordWrap": "break-word",
+      "isPremium": false,
+      "tags": ["social", "tiktok", "trendy", "youth"]
+    }
+  ],
+  "categories": [
+    {
+      "id": "heading",
+      "label": "Headings",
+      "description": "Large, bold text for titles"
+    },
+    {
+      "id": "subheading",
+      "label": "Subheadings",
+      "description": "Secondary titles and subtitles"
+    },
+    {
+      "id": "body",
+      "label": "Body Text",
+      "description": "Regular text for descriptions"
+    },
+    {
+      "id": "modern",
+      "label": "Modern",
+      "description": "Contemporary and trendy styles"
+    },
+    {
+      "id": "elegant",
+      "label": "Elegant",
+      "description": "Sophisticated and classy"
+    },
+    {
+      "id": "bold",
+      "label": "Bold & Strong",
+      "description": "High impact text"
+    },
+    {
+      "id": "creative",
+      "label": "Creative",
+      "description": "Unique and artistic styles"
+    },
+    {
+      "id": "minimal",
+      "label": "Minimal",
+      "description": "Clean and simple"
+    },
+    {
+      "id": "premium",
+      "label": "Premium",
+      "description": "Luxury and high-end styles"
+    },
+    {
+      "id": "social",
+      "label": "Social Media",
+      "description": "Optimized for social platforms"
+    }
+  ]
+}

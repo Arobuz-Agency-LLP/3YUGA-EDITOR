@@ -1,0 +1,154 @@
+{
+  "fonts": [
+    {
+      "id": "inter",
+      "name": "Inter",
+      "family": "Inter",
+      "postScriptName": "Inter",
+      "category": "sans-serif",
+      "weight": 400,
+      "isPremium": false,
+      "previewText": "The quick brown fox"
+    },
+    {
+      "id": "inter-bold",
+      "name": "Inter Bold",
+      "family": "Inter",
+      "postScriptName": "Inter-Bold",
+      "category": "sans-serif",
+      "weight": 700,
+      "isPremium": false,
+      "previewText": "The quick brown fox"
+    },
+    {
+      "id": "playfair",
+      "name": "Playfair Display",
+      "family": "Playfair Display",
+      "postScriptName": "PlayfairDisplay",
+      "category": "serif",
+      "weight": 400,
+      "isPremium": false,
+      "previewText": "The quick brown fox"
+    },
+    {
+      "id": "montserrat",
+      "name": "Montserrat",
+      "family": "Montserrat",
+      "postScriptName": "Montserrat",
+      "category": "sans-serif",
+      "weight": 400,
+      "isPremium": false,
+      "previewText": "The quick brown fox"
+    },
+    {
+      "id": "roboto",
+      "name": "Roboto",
+      "family": "Roboto",
+      "postScriptName": "Roboto",
+      "category": "sans-serif",
+      "weight": 400,
+      "isPremium": false,
+      "previewText": "The quick brown fox"
+    },
+    {
+      "id": "lora",
+      "name": "Lora",
+      "family": "Lora",
+      "postScriptName": "Lora",
+      "category": "serif",
+      "weight": 400,
+      "isPremium": false,
+      "previewText": "The quick brown fox"
+    },
+    {
+      "id": "dancing-script",
+      "name": "Dancing Script",
+      "family": "Dancing Script",
+      "postScriptName": "DancingScript",
+      "category": "handwriting",
+      "weight": 400,
+      "isPremium": true,
+      "previewText": "The quick brown fox"
+    },
+    {
+      "id": "bebas-neue",
+      "name": "Bebas Neue",
+      "family": "Bebas Neue",
+      "postScriptName": "BebasNeue",
+      "category": "display",
+      "weight": 400,
+      "isPremium": false,
+      "previewText": "THE QUICK BROWN FOX"
+    },
+    {
+      "id": "caveat",
+      "name": "Caveat",
+      "family": "Caveat",
+      "postScriptName": "Caveat",
+      "category": "handwriting",
+      "weight": 400,
+      "isPremium": true,
+      "previewText": "The quick brown fox"
+    },
+    {
+      "id": "oswald",
+      "name": "Oswald",
+      "family": "Oswald",
+      "postScriptName": "Oswald",
+      "category": "sans-serif",
+      "weight": 400,
+      "isPremium": false,
+      "previewText": "THE QUICK BROWN FOX"
+    },
+    {
+      "id": "poppins",
+      "name": "Poppins",
+      "family": "Poppins",
+      "postScriptName": "Poppins",
+      "category": "sans-serif",
+      "weight": 400,
+      "isPremium": false,
+      "previewText": "The quick brown fox"
+    },
+    {
+      "id": "raleway",
+      "name": "Raleway",
+      "family": "Raleway",
+      "postScriptName": "Raleway",
+      "category": "sans-serif",
+      "weight": 400,
+      "isPremium": false,
+      "previewText": "The quick brown fox"
+    },
+    {
+      "id": "pacifico",
+      "name": "Pacifico",
+      "family": "Pacifico",
+      "postScriptName": "Pacifico",
+      "category": "handwriting",
+      "weight": 400,
+      "isPremium": true,
+      "previewText": "The quick brown fox"
+    },
+    {
+      "id": "impact",
+      "name": "Impact",
+      "family": "Impact",
+      "postScriptName": "Impact",
+      "category": "display",
+      "weight": 400,
+      "isPremium": false,
+      "previewText": "THE QUICK BROWN FOX"
+    },
+    {
+      "id": "source-code-pro",
+      "name": "Source Code Pro",
+      "family": "Source Code Pro",
+      "postScriptName": "SourceCodePro",
+      "category": "monospace",
+      "weight": 400,
+      "isPremium": false,
+      "previewText": "The quick brown fox"
+    }
+  ]
+}
