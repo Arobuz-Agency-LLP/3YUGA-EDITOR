@@ -1,0 +1,18 @@
+1. When a image is set as background , i am not able to add another image , 
+reason -  After setting an image as background, new uploads were added but could be behind or not interactable due to stacking and interactivity flags.
+
+Solution - When adding a new image, force it to be interactable and on top and also make Ensure uploaded images are selectable and evented.
+Bring newly added image to the front and select it.
+
+
+2. Duplicate function not working after i shifted all shapes in shapeproperties.js
+cAUSE:Duplicate function was not picking right variable 
+
+3. When slected a template nd tried to mask a image in shape the image was being set as background image
+fix : template background objects were being treated as shapes ,Excluded background-like objects from being chosen as shapes.
+Correctly computed shape bounds for circles and ellipses.
+
+4. when locked a object from right click then was not able to again right click on it , 
+ fix : dded a islocked boolean to fix this issue 
+
+ 5. 
