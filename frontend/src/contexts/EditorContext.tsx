@@ -219,6 +219,206 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     }
   }, [canvas]);
+
+  const removeBackground = useCallback(async () => {
+    if (!canvas) {
+      toast.error('Canvas is not initialized');
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      // Check if an image object is selected
+      const selectedObject = canvas.getActiveObject() as any;
+      const isImageSelected = selectedObject && selectedObject.type === 'image';
+      
+      let dataURL: string;
+      let originalCanvasWidth: number;
+      let originalCanvasHeight: number;
+      let imageBounds: any = null;
+      
+      if (isImageSelected) {
+        // Export only the selected image object
+        const imgElement = selectedObject.getElement();
+        const tempCanvas = document.createElement('canvas');
+        const ctx = tempCanvas.getContext('2d');
+        if (!ctx) throw new Error('Failed to create canvas context');
+        
+        // Get actual image dimensions (accounting for scale)
+        const imgWidth = selectedObject.width || imgElement.width;
+        const imgHeight = selectedObject.height || imgElement.height;
+        const scaleX = selectedObject.scaleX || 1;
+        const scaleY = selectedObject.scaleY || 1;
+        const actualWidth = imgWidth * scaleX;
+        const actualHeight = imgHeight * scaleY;
+        
+        tempCanvas.width = actualWidth;
+        tempCanvas.height = actualHeight;
+        
+        // Draw the image at full size
+        ctx.drawImage(imgElement, 0, 0, actualWidth, actualHeight);
+        
+        dataURL = tempCanvas.toDataURL('image/png', 1.0);
+        originalCanvasWidth = canvas.getWidth();
+        originalCanvasHeight = canvas.getHeight();
+        imageBounds = {
+          left: selectedObject.left,
+          top: selectedObject.top,
+          width: actualWidth,
+          height: actualHeight
+        };
+        
+        console.log('Removing background from selected image:', {
+          dimensions: { width: actualWidth, height: actualHeight },
+          position: { left: selectedObject.left, top: selectedObject.top }
+        });
+      } else {
+        // Export entire canvas
+        originalCanvasWidth = canvas.getWidth();
+        originalCanvasHeight = canvas.getHeight();
+        
+        // Use higher multiplier for better quality (2x for retina/HD displays)
+        dataURL = canvas.toDataURL({
+          format: 'png',
+          quality: 1,
+          multiplier: 2 // Higher resolution for better quality
+        });
+        
+        console.log('Removing background from entire canvas:', {
+          dimensions: { width: originalCanvasWidth, height: originalCanvasHeight }
+        });
+      }
+
+      // Convert dataURL to blob
+      const dataURLToBlob = (dataURL: string): Blob => {
+        const arr = dataURL.split(',');
+        const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/png';
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new Blob([u8arr], { type: mime });
+      };
+      
+      const blob = dataURLToBlob(dataURL);
+      console.log('Sending image blob size:', blob.size, 'bytes');
+
+      // Create FormData and append the image
+      const formData = new FormData();
+      formData.append('image', blob, 'canvas.png');
+
+      // Import API config
+      const { API_ENDPOINTS } = await import('../config/apiConfig');
+      
+      // Send to backend API
+      const apiResponse = await fetch(API_ENDPOINTS.REMOVE_BACKGROUND, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!apiResponse.ok) {
+        throw new Error(`API error: ${apiResponse.status} ${apiResponse.statusText}`);
+      }
+
+      // Get the processed image blob
+      const processedBlob = await apiResponse.blob();
+      console.log('Received processed image blob size:', processedBlob.size, 'bytes');
+      const imageUrl = URL.createObjectURL(processedBlob);
+
+      // Load the new PNG image onto the canvas
+      try {
+        const img = await FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' });
+        
+        console.log('Processed image dimensions:', { 
+          width: img.width, 
+          height: img.height,
+          originalCanvasWidth,
+          originalCanvasHeight
+        });
+
+        if (isImageSelected && imageBounds) {
+          // Replace the selected image object with the processed one
+          const scaleX = imageBounds.width / img.width;
+          const scaleY = imageBounds.height / img.height;
+          
+          img.set({
+            left: imageBounds.left,
+            top: imageBounds.top,
+            scaleX: scaleX,
+            scaleY: scaleY,
+            selectable: true,
+            evented: true,
+          });
+          
+          // Remove the old image and add the new one
+          canvas.remove(selectedObject);
+          canvas.add(img);
+          canvas.setActiveObject(img);
+        } else {
+          // Replace entire canvas with processed image
+          const canvasWidth = originalCanvasWidth;
+          const canvasHeight = originalCanvasHeight;
+          
+          // Calculate scale to fit canvas while preserving aspect ratio
+          const scaleX = canvasWidth / img.width;
+          const scaleY = canvasHeight / img.height;
+          const scale = Math.min(scaleX, scaleY);
+          
+          // Center the image
+          const scaledWidth = img.width * scale;
+          const scaledHeight = img.height * scale;
+          const left = (canvasWidth - scaledWidth) / 2;
+          const top = (canvasHeight - scaledHeight) / 2;
+
+          // Clear the canvas first
+          canvas.clear();
+
+          img.set({
+            left: left,
+            top: top,
+            scaleX: scale,
+            scaleY: scale,
+            selectable: true,
+            evented: true,
+          });
+          
+          canvas.add(img);
+        }
+        
+        canvas.renderAll();
+        
+        // Update layers and save to history
+        updateLayers();
+        saveToHistory();
+
+        // Clean up the object URL
+        URL.revokeObjectURL(imageUrl);
+
+        toast.success('Background removed successfully!');
+      } catch (loadError) {
+        // Clean up the object URL if it was created
+        if (imageUrl) {
+          URL.revokeObjectURL(imageUrl);
+        }
+        throw new Error('Failed to load processed image');
+      }
+    } catch (error: any) {
+      console.error('Background removal failed:', error);
+      
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+        toast.error('Cannot connect to the backend API. Please ensure the Flask server is running on http://localhost:5000');
+      } else if (error.message?.includes('API error')) {
+        toast.error(`Backend API error: ${error.message}`);
+      } else {
+        toast.error('Failed to remove background. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [canvas, updateLayers, saveToHistory]);
   
   const duplicateObject = useCallback(() => {
     if (activeObject && canvas) {
@@ -744,6 +944,16 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         } as any);
       }
       
+      // Position clip path absolutely so the mask stays fixed while moving the image
+      const imgLeft = (activeObject as any).left || 0;
+      const imgTop = (activeObject as any).top || 0;
+      const imgAngle = (activeObject as any).angle || 0;
+
+      (clipShape as any).absolutePositioned = true;
+      (clipShape as any).left = imgLeft;
+      (clipShape as any).top = imgTop;
+      (clipShape as any).angle = imgAngle;
+
       canvas.remove(shapeToUse as any);
       (activeObject as any).clipPath = clipShape;
       (activeObject as any).dirty = true;
@@ -1142,7 +1352,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     backgroundOpacity,
     setBackgroundOpacity,
     applyTemplateContrast,
-    applyBackgroundOpacity
+    applyBackgroundOpacity,
+    removeBackground
   };
 
   return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;

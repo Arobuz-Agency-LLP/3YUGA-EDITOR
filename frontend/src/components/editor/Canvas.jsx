@@ -381,8 +381,11 @@ const Canvas = () => {
 
           // Load Excalidraw scene (editable) if present
           const sceneKeys = ['excali-save', 'handoff:excalidrawSceneToEditor', 'excalidraw-local-save'];
+          let importedScene = false;
           for (const key of sceneKeys) {
-            const alreadyImported = sessionStorage.getItem(`imported:${key}`);
+            let alreadyImported = sessionStorage.getItem(`imported:${key}`);
+            // Always allow fresh import for direct handoff from MindMapping
+            if (key === 'handoff:excalidrawSceneToEditor') alreadyImported = null;
             const raw = window.localStorage.getItem(key);
             if (raw && !alreadyImported) {
               try {
@@ -393,7 +396,7 @@ const Canvas = () => {
                   updateLayers();
                   saveToHistory();
                   toast.success('Loaded Excalidraw scene (editable)');
-                  // Do NOT remove keys automatically to avoid disappearance during debugging
+                  importedScene = true;
                 } else {
                   toast.error('Failed to load Excalidraw scene');
                 }
@@ -401,9 +404,40 @@ const Canvas = () => {
                 console.error('Invalid Excalidraw scene:', e);
               }
               break;
-            } else {
-              try { console.debug(`[editor] scene key not found or already imported: ${key}`); } catch (_) {}
             }
+          }
+
+          // If not yet imported (timing issues), poll briefly for the handoff key
+          if (!importedScene) {
+            let attempts = 0;
+            const maxAttempts = 100; // ~10s at 100ms
+            const poll = setInterval(() => {
+              attempts++;
+              for (const key of sceneKeys) {
+                let alreadyImported = sessionStorage.getItem(`imported:${key}`);
+                if (key === 'handoff:excalidrawSceneToEditor') alreadyImported = null;
+                const raw = window.localStorage.getItem(key);
+                if (raw && !alreadyImported) {
+                  try {
+                    const scene = JSON.parse(raw);
+                    const ok = importExcalidrawToFabric(fabricCanvas, scene);
+                    if (ok) {
+                      sessionStorage.setItem(`imported:${key}`, '1');
+                      updateLayers();
+                      saveToHistory();
+                      toast.success('Loaded Excalidraw scene (editable)');
+                      clearInterval(poll);
+                      return;
+                    }
+                  } catch (e) {
+                    console.error('Invalid Excalidraw scene (poll):', e);
+                    clearInterval(poll);
+                    return;
+                  }
+                }
+              }
+              if (attempts >= maxAttempts) clearInterval(poll);
+            }, 100);
           }
 
           // Load full board image as background
@@ -875,6 +909,38 @@ const Canvas = () => {
         
       case 'fillWithImage':
         fillShapeWithImage();
+        break;
+
+      case 'repositionInsideMask':
+        if (activeObject.type === 'image' && activeObject.clipPath) {
+          try {
+            // Ensure clipPath is absolute so it stays fixed while dragging the image
+            const cp = activeObject.clipPath;
+            cp.absolutePositioned = true;
+            cp.left = cp.left != null ? cp.left : activeObject.left;
+            cp.top = cp.top != null ? cp.top : activeObject.top;
+            cp.angle = cp.angle != null ? cp.angle : (activeObject.angle || 0);
+
+            // Give user feedback
+            toast.success('Drag the image to reposition within the mask. Press Enter to finish.');
+
+            // Tag the object so our key handler can finish the mode
+            activeObject._repositionInMask = true;
+            canvas.renderAll();
+
+            // Temporary key handler to finish reposition mode
+            const endHandler = (evt) => {
+              if (evt.key === 'Enter') {
+                activeObject._repositionInMask = false;
+                document.removeEventListener('keydown', endHandler);
+                canvas.renderAll();
+                saveToHistory();
+                toast.success('Reposition applied');
+              }
+            };
+            document.addEventListener('keydown', endHandler);
+          } catch (_) {}
+        }
         break;
         
       default:

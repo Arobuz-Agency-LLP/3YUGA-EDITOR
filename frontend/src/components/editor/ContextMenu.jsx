@@ -30,6 +30,13 @@ const ContextMenu = ({ isVisible, position, onClose, activeObject, onAction }) =
     );
   }
 
+  // Add reposition in mask when image has a clipPath
+  if (activeObject?.type === 'image' && activeObject?.clipPath) {
+    menuItems.splice(1, 0,
+      { id: 'repositionInsideMask', label: 'Reposition in Mask', icon: ImageIcon }
+    );
+  }
+
   // Add text-specific options
   if (activeObject?.type === 'textbox') {
     menuItems.splice(-3, 0,

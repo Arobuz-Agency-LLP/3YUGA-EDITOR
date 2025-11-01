@@ -15,4 +15,8 @@ Correctly computed shape bounds for circles and ellipses.
 4. when locked a object from right click then was not able to again right click on it , 
  fix : dded a islocked boolean to fix this issue 
 
- 5. 
+ 5. when using a template nd then try to mask image on a shape image being setted as background image 
+ fix: 
+
+ 6. cors issue for unsplash images 
+ fix: made cors issue anoymus in Canvas.jsx

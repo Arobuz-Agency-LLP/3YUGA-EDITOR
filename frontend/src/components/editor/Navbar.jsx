@@ -2,10 +2,9 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { useEditor } from '../../contexts/EditorContext.tsx';
-import { Undo, Redo, Download, Save, Plus, ZoomIn, ZoomOut, Moon, Sun, Grid3x3, ArrowUp, ArrowDown, Copy, Trash2, Keyboard, RotateCcw, Maximize2, Layers, RotateCw, Minimize2 } from 'lucide-react';
+import { Undo, Redo, Download, Save, Plus, ZoomIn, ZoomOut, Moon, Sun, Grid3x3, ArrowUp, ArrowDown, Copy, Trash2, Keyboard, RotateCcw, Maximize2, Layers, RotateCw, Minimize2, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { Toaster } from '../ui/sonner';
 import {
   Popover,
   PopoverContent,
@@ -13,7 +12,7 @@ import {
 } from '../ui/popover';
 
 const Navbar = () => {
-  const { canvas, undo, redo, zoom, setZoom, isDarkMode, setIsDarkMode, saveToHistory, showGrid, setShowGrid, activeObject, bringForward, sendBackward, copyObject, deleteObject, exportCanvas, duplicateObject, centerObject, resetCanvas, isLoading, rotateCanvas, history, historyStep } = useEditor();
+  const { canvas, undo, redo, zoom, setZoom, isDarkMode, setIsDarkMode, saveToHistory, showGrid, setShowGrid, activeObject, bringForward, sendBackward, copyObject, deleteObject, exportCanvas, duplicateObject, centerObject, resetCanvas, isLoading, rotateCanvas, history, historyStep, removeBackground } = useEditor();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -25,6 +24,14 @@ const Navbar = () => {
       });
     } catch (error) {
       toast.error('Failed to export design');
+    }
+  };
+
+  const handleRemoveBackground = async () => {
+    try {
+      await removeBackground();
+    } catch (error) {
+      // Error handling is done in the removeBackground function
     }
   };
 
@@ -116,7 +123,6 @@ const Navbar = () => {
 
   return (
     <>
-      <Toaster position="top-center" richColors />
       <motion.nav
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -149,6 +155,17 @@ const Navbar = () => {
           <Button onClick={handleSave} variant="outline" size="sm" className="gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
             <Save className="w-4 h-4" />
             Save
+          </Button>
+          <Button 
+            onClick={handleRemoveBackground} 
+            variant="outline" 
+            size="sm" 
+            className="gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all disabled:opacity-50"
+            disabled={isLoading}
+            title="Remove Background"
+          >
+            <Sparkles className={`w-4 h-4 ${isLoading ? 'animate-pulse' : ''}`} />
+            {isLoading ? 'Processing...' : 'Remove Background'}
           </Button>
           <Button 
             onClick={handleExport} 
