@@ -309,6 +309,15 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Create FormData and append the image
       const formData = new FormData();
       formData.append('image', blob, 'canvas.png');
+      
+      // Enable alpha matting for better edge precision (smoother edges)
+      formData.append('alpha_matting', 'true');
+      formData.append('alpha_matting_foreground_threshold', '240');
+      formData.append('alpha_matting_background_threshold', '10');
+      formData.append('alpha_matting_erode_size', '10');
+      
+      // Use auto model detection (will choose best model based on image)
+      formData.append('model', 'auto');
 
       // Import API config
       const { API_ENDPOINTS } = await import('../config/apiConfig');
