@@ -20,3 +20,6 @@ Correctly computed shape bounds for circles and ellipses.
 
  6. cors issue for unsplash images 
  fix: made cors issue anoymus in Canvas.jsx
+
+ 7.Text shadow effects were not working resize function was being called in loop nd resize observer was beigng called nd was flagging error before react could load 
+ fix:suppresed that observer

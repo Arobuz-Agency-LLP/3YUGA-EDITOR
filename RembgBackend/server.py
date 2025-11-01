@@ -21,7 +21,7 @@ def get_session(model_name='isnet-general-use'):
     """Get or create a rembg session for the specified model."""
     with _session_lock:
         if model_name not in _sessions:
-            logger.info(f'Initializing model: {model_name} (this may download from GitHub on first use)')
+            logger.info(f'Initializing model: {model_name} ')
             # Use ISNet General Use model for better precision (more accurate than u2net)
             # Alternative models: 'u2net', 'u2net_human_seg', 'u2netp', 'silueta', 'isnet-general-use', 'sam'
             _sessions[model_name] = new_session(model_name)
@@ -63,7 +63,7 @@ def remove_bg():
         # Get model type from request (optional parameter)
         model_type = request.form.get('model', 'isnet-general-use').lower()
         
-        # Auto-detect portrait/human images for specialized model
+        # this auto detects ki if its image of person or not and selects best model
         if model_type == 'auto':
             # Simple heuristic: if width/height ratio suggests portrait and image is medium-large
             width, height = input_image.size

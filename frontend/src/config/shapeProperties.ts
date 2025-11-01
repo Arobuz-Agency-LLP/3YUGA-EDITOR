@@ -821,12 +821,30 @@ export const createShadow = (color: string = 'rgba(0,0,0,0.3)', blur: number = 1
 // Apply shadow to shape
 export const applyShadowToShape = (shapeObject: any, shadowConfig: ShadowPreset = createShadow()): void => {
   if (!shapeObject) return;
-  shapeObject.set('shadow', {
-    color: shadowConfig.color,
-    blur: shadowConfig.blur,
-    offsetX: shadowConfig.offsetX,
-    offsetY: shadowConfig.offsetY
-  });
+  
+  // Create a proper Fabric.js Shadow object (required for shadows to work)
+  // Allow shadow if blur > 0 OR if there are offsets (even with blur 0)
+  const hasShadow = shadowConfig && 
+    shadowConfig.color !== 'transparent' && 
+    (shadowConfig.blur > 0 || (shadowConfig.offsetX || 0) !== 0 || (shadowConfig.offsetY || 0) !== 0);
+  
+  if (hasShadow) {
+    // Ensure minimum blur of 1 if there are offsets
+    const blur = (shadowConfig.blur || 0) > 0 ? shadowConfig.blur! : 
+                 ((shadowConfig.offsetX || 0) !== 0 || (shadowConfig.offsetY || 0) !== 0 ? 1 : 0);
+    
+    shapeObject.set('shadow', new fabric.Shadow({
+      color: shadowConfig.color!,
+      blur: blur,
+      offsetX: shadowConfig.offsetX || 0,
+      offsetY: shadowConfig.offsetY || 0,
+      affectStroke: false,
+      nonScaling: false
+    }));
+  } else {
+    // Remove shadow if it's set to none/transparent
+    shapeObject.set('shadow', null);
+  }
 };
 
 // Preset shadow configurations

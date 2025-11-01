@@ -133,7 +133,7 @@ const Navbar = () => {
             className="text-2xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent"
             whileHover={{ scale: 1.05 }}
           >
-            Vansh Editor
+            Uzair  Editor
           </motion.h1>
         </div>
 
