@@ -1,0 +1,12 @@
+flask
+flask-cors
+rembg
+Pillow
+opencv-python
+numpy
+pytesseract
+scikit-learn
+
+
+
+

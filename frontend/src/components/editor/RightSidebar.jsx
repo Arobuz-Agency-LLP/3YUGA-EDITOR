@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useEditor } from '../../contexts/EditorContext.tsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { ScrollArea } from '../ui/scroll-area';
@@ -8,6 +8,8 @@ import { Slider } from '../ui/slider';
 import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Settings, Layers, AlignLeft, AlignCenter, AlignRight, Trash2, Copy, Lock, Unlock, Eye, EyeOff, Wand2, GripVertical, Group, Ungroup, CheckSquare, Square, ChevronDown, ChevronRight, Image as ImageIcon, Paintbrush, Sparkles, X } from 'lucide-react';
+import DetectedTextPanel from './DetectedTextPanel';
+import EditableApiResponse from './EditableApiResponse';
 import { motion, Reorder } from 'framer-motion';
 import { toast } from 'sonner';
 import * as fabric from 'fabric';
@@ -15,7 +17,6 @@ import { allGoogleFonts, loadGoogleFont, searchFonts } from '../../utils/googleF
 import { filterPresets } from '../../config/filters';
 import { textEffectPresets, applyTextEffect } from '../../config/textProperties';
 import { shapeStylePresets, shapeBorderPresets, applyShapeStyle, applyBorderPreset, shadowPresets, applyShadowToShape } from '../../config/shapeProperties';
-
 
 const LayerItem = ({ layer, index, selectedLayers, selectLayer, toggleLayerVisibility, toggleLayerLock, expandedGroups, toggleGroupExpansion, reorderLayers, ungroupLayer }) => {
   const isExpanded = expandedGroups.has(layer.id);
@@ -153,20 +154,12 @@ const RightSidebar = () => {
     applyFilterPreset,
     removeFilters,
     activeFilterPreset,
-    setActiveFilterPreset,
-    undo,
-    redo,
-    history,
-    historyStep
+    setActiveFilterPreset
   } = useEditor();
   const [fontSearch, setFontSearch] = useState('');
   const [filteredFonts, setFilteredFonts] = useState(allGoogleFonts.slice(0, 100));
   const [maskText, setMaskText] = useState('TEXT');
   const [recentColors, setRecentColors] = useState(['#000000']);
-  const [snapToGrid, setSnapToGrid] = useState(false);
-  const [gridSize, setGridSize] = useState(20);
-  const fileInputRef = useRef(null);
-  const replaceImageInputRef = useRef(null);
   const [properties, setProperties] = useState({
     fill: '#000000',
     stroke: '#000000',
@@ -179,14 +172,11 @@ const RightSidebar = () => {
     brightness: 0,
     contrast: 0,
     saturation: 0,
-    blur: 0,
-    shadowBlur: 0,
-    shadowColor: 'rgba(0,0,0,0.5)'
+    blur: 0
   });
 
   useEffect(() => {
     if (activeObject) {
-      const shadow = activeObject.shadow;
       const newProperties = {
         fill: activeObject.fill || '#000000',
         stroke: activeObject.stroke || '#000000',
@@ -199,9 +189,7 @@ const RightSidebar = () => {
         brightness: activeObject.brightness || 0,
         contrast: activeObject.contrast || 0,
         saturation: activeObject.saturation || 0,
-        blur: activeObject.blur || 0,
-        shadowBlur: shadow?.blur ?? 0,
-        shadowColor: shadow?.color ?? 'rgba(0,0,0,0.5)'
+        blur: activeObject.blur || 0
       };
       setProperties(newProperties);
       
@@ -265,77 +253,6 @@ const RightSidebar = () => {
       
       canvas.renderAll();
       setProperties(prev => ({ ...prev, [key]: value }));
-      saveToHistory();
-    }
-  };
-
-  // Helper functions for color conversion
-  const rgbaToHex = (rgba) => {
-    if (!rgba || typeof rgba !== 'string') return '#000000';
-    if (rgba.startsWith('#')) return rgba;
-    
-    const matches = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-    if (matches) {
-      const r = parseInt(matches[1]).toString(16).padStart(2, '0');
-      const g = parseInt(matches[2]).toString(16).padStart(2, '0');
-      const b = parseInt(matches[3]).toString(16).padStart(2, '0');
-      return `#${r}${g}${b}`;
-    }
-    return '#000000';
-  };
-
-  const hexToRgba = (hex, alpha) => {
-    if (!hex || typeof hex !== 'string') return 'rgba(0,0,0,0.3)';
-    
-    const hexColor = hex.replace('#', '');
-    const r = parseInt(hexColor.substring(0, 2), 16);
-    const g = parseInt(hexColor.substring(2, 4), 16);
-    const b = parseInt(hexColor.substring(4, 6), 16);
-    const a = alpha !== undefined ? alpha : 0.3;
-    
-    return `rgba(${r},${g},${b},${a})`;
-  };
-
-  const extractAlpha = (rgba) => {
-    if (!rgba || typeof rgba !== 'string') return 0.3;
-    const matches = rgba.match(/rgba?\([^)]+,\s*([\d.]+)\)/);
-    return matches ? parseFloat(matches[1]) : 0.3;
-  };
-
-  const updateShadowProperty = (key, value) => {
-    if (activeObject && canvas) {
-      // Get current shadow values from properties state
-      const blur = key === 'shadowBlur' ? Number(value) : (properties.shadowBlur || 0);
-      const color = key === 'shadowColor' ? String(value) : (properties.shadowColor || 'rgba(0,0,0,0.5)');
-      
-      // Update properties state first
-      setProperties(prev => ({ ...prev, [key]: value }));
-      
-      // Create or update shadow with default offsets for visibility
-      if (blur > 0) {
-        try {
-          // Use default offsets (3, 3) for a soft shadow effect
-          activeObject.set('shadow', new fabric.Shadow({
-            color: color,
-            blur: blur,
-            offsetX: 3,
-            offsetY: 3,
-            affectStroke: false,
-            nonScaling: false
-          }));
-          // Force render
-          activeObject.set('dirty', true);
-          canvas.requestRenderAll();
-        } catch (error) {
-          console.error('Error creating shadow:', error);
-        }
-      } else {
-        // Remove shadow if blur is 0
-        activeObject.set('shadow', null);
-        activeObject.set('dirty', true);
-        canvas.requestRenderAll();
-      }
-      
       saveToHistory();
     }
   };
@@ -536,7 +453,7 @@ const setAsBackground = () => {
       className="w-80 h-screen border-l border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex flex-col"
     >
       <Tabs defaultValue="properties" className="flex-1 flex flex-col h-full">
-        <TabsList className="grid grid-cols-2 m-4 h-auto p-1 bg-slate-100 dark:bg-slate-800 flex-shrink-0">
+        <TabsList className="grid grid-cols-3 m-4 h-auto p-1 bg-slate-100 dark:bg-slate-800 flex-shrink-0">
           <TabsTrigger value="properties" className="flex gap-2 py-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">
             <Settings className="w-4 h-4" />
             <span className="text-sm">Properties</span>
@@ -544,6 +461,10 @@ const setAsBackground = () => {
           <TabsTrigger value="layers" className="flex gap-2 py-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">
             <Layers className="w-4 h-4" />
             <span className="text-sm">Layers</span>
+          </TabsTrigger>
+          <TabsTrigger value="editImage" className="flex gap-2 py-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">
+            <Wand2 className="w-4 h-4" />
+            <span className="text-sm">Edit Image</span>
           </TabsTrigger>
         </TabsList>
 
@@ -566,10 +487,6 @@ const setAsBackground = () => {
                   <Button onClick={deleteObject} variant="outline" size="sm" className="flex-1 gap-2 text-red-600 hover:text-red-700">
                     <Trash2 className="w-4 h-4" />
                     Delete
-                  </Button>
-                  <Button onClick={duplicateObject} variant="outline" size="sm" className="flex-1 gap-2">
-                    <Copy className="w-4 h-4" />
-                    Duplicate
                   </Button>
                 </div>
 
@@ -689,11 +606,8 @@ const setAsBackground = () => {
                       <Label>Text Effects</Label>
                       <Select onValueChange={(effect) => {
                         applyTextEffect(activeObject, effect);
-                        // Defer render to avoid ResizeObserver loop with Select component
-                        setTimeout(() => {
-                          canvas.renderAll();
-                          saveToHistory();
-                        }, 0);
+                        canvas.renderAll();
+                        saveToHistory();
                         toast.success(`${textEffectPresets[effect].name} applied!`);
                       }}>
                         <SelectTrigger>
@@ -716,13 +630,8 @@ const setAsBackground = () => {
                     <Label>Shape Style</Label>
                     <Select onValueChange={(style) => {
                       applyShapeStyle(activeObject, style);
-                      // Defer render to avoid ResizeObserver loop with Select component
-                      requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                          canvas.renderAll();
-                          saveToHistory();
-                        });
-                      });
+                      canvas.renderAll();
+                      saveToHistory();
                       toast.success(`${shapeStylePresets[style].name} applied!`);
                     }}>
                       <SelectTrigger>
@@ -852,100 +761,29 @@ const setAsBackground = () => {
                 </div>
 
                 {activeObject.type !== 'textbox' && (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Shadow Effects</Label>
-                      <Select onValueChange={(shadowType) => {
-                        if (shadowType === 'none') {
-                          activeObject.set('shadow', null);
-                          // Reset shadow properties
-                          setProperties(prev => ({
-                            ...prev,
-                            shadowBlur: 0,
-                            shadowColor: 'rgba(0,0,0,0.5)'
-                          }));
-                          canvas.requestRenderAll();
-                          saveToHistory();
-                          toast.success('Shadow removed!');
-                        } else {
-                          const preset = shadowPresets[shadowType];
-                          if (preset) {
-                            // Apply shadow using the preset
-                            applyShadowToShape(activeObject, preset);
-                            // Update properties when preset is applied
-                            setProperties(prev => ({
-                              ...prev,
-                              shadowBlur: preset.blur || 0,
-                              shadowColor: preset.color || 'rgba(0,0,0,0.5)'
-                            }));
-                            // Defer render to avoid ResizeObserver loop with Select component
-                            requestAnimationFrame(() => {
-                              requestAnimationFrame(() => {
-                                canvas.requestRenderAll();
-                                saveToHistory();
-                                toast.success('Shadow applied!');
-                              });
-                            });
-                          }
-                        }
-                      }}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Choose shadow" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(shadowPresets).map(([key, preset]) => (
-                            <SelectItem key={key} value={key}>
-                              {preset.name || key.charAt(0).toUpperCase() + key.slice(1)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Shadow Blur</Label>
-                      <div className="flex gap-2">
-                        <Slider
-                          value={[properties.shadowBlur]}
-                          onValueChange={(val) => updateShadowProperty('shadowBlur', val[0])}
-                          min={0}
-                          max={100}
-                          step={1}
-                          className="flex-1"
-                        />
-                        <Input
-                          type="number"
-                          value={properties.shadowBlur}
-                          onChange={(e) => updateShadowProperty('shadowBlur', parseInt(e.target.value) || 0)}
-                          className="w-16"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Shadow Color</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          type="color"
-                          value={typeof properties.shadowColor === 'string' && properties.shadowColor.startsWith('rgba') 
-                            ? rgbaToHex(properties.shadowColor) 
-                            : properties.shadowColor}
-                          onChange={(e) => {
-                            const hexColor = e.target.value;
-                            const rgbaColor = hexToRgba(hexColor, extractAlpha(properties.shadowColor));
-                            updateShadowProperty('shadowColor', rgbaColor);
-                          }}
-                          className="w-16 h-10 p-1 cursor-pointer"
-                        />
-                        <Input
-                          type="text"
-                          value={properties.shadowColor}
-                          onChange={(e) => updateShadowProperty('shadowColor', e.target.value)}
-                          className="flex-1"
-                          placeholder="rgba(0,0,0,0.3)"
-                        />
-                      </div>
-                    </div>
+                  <div className="space-y-2">
+                    <Label>Shadow Effects</Label>
+                    <Select onValueChange={(shadowType) => {
+                      if (shadowType === 'none') {
+                        activeObject.set('shadow', null);
+                      } else {
+                        applyShadowToShape(activeObject, shadowPresets[shadowType]);
+                      }
+                      canvas.renderAll();
+                      saveToHistory();
+                      toast.success('Shadow applied!');
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose shadow" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(shadowPresets).map(([key, preset]) => (
+                          <SelectItem key={key} value={key}>
+                            {preset.name || key.charAt(0).toUpperCase() + key.slice(1)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
 
@@ -1237,6 +1075,9 @@ const setAsBackground = () => {
                 <p className="text-sm">No layers yet</p>
               </div>
             )}
+          </TabsContent>
+          <TabsContent value="editImage" className="mt-0 space-y-3">
+            <EditableApiResponse />
           </TabsContent>
         </ScrollArea>
       </Tabs>

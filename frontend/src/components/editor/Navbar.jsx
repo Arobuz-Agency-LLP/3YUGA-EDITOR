@@ -2,7 +2,7 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { useEditor } from '../../contexts/EditorContext.tsx';
-import { Undo, Redo, Download, Save, Plus, ZoomIn, ZoomOut, Moon, Sun, Grid3x3, ArrowUp, ArrowDown, Copy, Trash2, Keyboard, RotateCcw, Maximize2, Layers, RotateCw, Minimize2, Sparkles } from 'lucide-react';
+import { Undo, Redo, Download, Save, Plus, ZoomIn, ZoomOut, Moon, Sun, Grid3x3, ArrowUp, ArrowDown, Copy, Trash2, Keyboard, RotateCcw, Maximize2, Layers, RotateCw, Minimize2, Sparkles, Wand2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import {
@@ -10,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '../ui/popover';
+import { processImageForEditing } from '../../utils/canvasControls';
 
 const Navbar = () => {
   const { canvas, undo, redo, zoom, setZoom, isDarkMode, setIsDarkMode, saveToHistory, showGrid, setShowGrid, activeObject, bringForward, sendBackward, copyObject, deleteObject, exportCanvas, duplicateObject, centerObject, resetCanvas, isLoading, rotateCanvas, history, historyStep, removeBackground } = useEditor();
@@ -176,6 +177,29 @@ const Navbar = () => {
           >
             <Download className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             {isLoading ? 'Exporting...' : 'Export'}
+          </Button>
+
+          <Button 
+            onClick={async () => {
+              try {
+                if (!canvas) return;
+                const obj = canvas.getActiveObject();
+                if (obj && obj.type === 'image' && !obj.isBackgroundImage) {
+                  await processImageForEditing(obj, canvas, () => {}, saveToHistory);
+                } else {
+                  toast.error('Select a regular image to make editable');
+                }
+              } catch (e) {
+                toast.error('Failed to make editable');
+              }
+            }} 
+            variant="outline" 
+            size="sm" 
+            className="gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+            title="Make selected image editable"
+          >
+            <Wand2 className="w-4 h-4" />
+            Make Editable
           </Button>
 
           <div className="w-px h-8 bg-slate-200 dark:bg-slate-700 mx-2" />

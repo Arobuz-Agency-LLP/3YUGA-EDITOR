@@ -5,6 +5,7 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:500
 
 export const API_ENDPOINTS = {
   REMOVE_BACKGROUND: `${API_BASE_URL}/remove-bg`,
+  MAKE_EDITABLE: `${API_BASE_URL}/make-editable`,
 };
 
 export default API_BASE_URL;
