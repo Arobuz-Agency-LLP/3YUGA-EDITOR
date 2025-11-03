@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useEditor } from '../../contexts/EditorContext.tsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { ScrollArea } from '../ui/scroll-area';
@@ -15,6 +15,7 @@ import { allGoogleFonts, loadGoogleFont, searchFonts } from '../../utils/googleF
 import { filterPresets } from '../../config/filters';
 import { textEffectPresets, applyTextEffect } from '../../config/textProperties';
 import { shapeStylePresets, shapeBorderPresets, applyShapeStyle, applyBorderPreset, shadowPresets, applyShadowToShape } from '../../config/shapeProperties';
+
 
 const LayerItem = ({ layer, index, selectedLayers, selectLayer, toggleLayerVisibility, toggleLayerLock, expandedGroups, toggleGroupExpansion, reorderLayers, ungroupLayer }) => {
   const isExpanded = expandedGroups.has(layer.id);
@@ -152,12 +153,20 @@ const RightSidebar = () => {
     applyFilterPreset,
     removeFilters,
     activeFilterPreset,
-    setActiveFilterPreset
+    setActiveFilterPreset,
+    undo,
+    redo,
+    history,
+    historyStep
   } = useEditor();
   const [fontSearch, setFontSearch] = useState('');
   const [filteredFonts, setFilteredFonts] = useState(allGoogleFonts.slice(0, 100));
   const [maskText, setMaskText] = useState('TEXT');
   const [recentColors, setRecentColors] = useState(['#000000']);
+  const [snapToGrid, setSnapToGrid] = useState(false);
+  const [gridSize, setGridSize] = useState(20);
+  const fileInputRef = useRef(null);
+  const replaceImageInputRef = useRef(null);
   const [properties, setProperties] = useState({
     fill: '#000000',
     stroke: '#000000',
@@ -557,6 +566,10 @@ const setAsBackground = () => {
                   <Button onClick={deleteObject} variant="outline" size="sm" className="flex-1 gap-2 text-red-600 hover:text-red-700">
                     <Trash2 className="w-4 h-4" />
                     Delete
+                  </Button>
+                  <Button onClick={duplicateObject} variant="outline" size="sm" className="flex-1 gap-2">
+                    <Copy className="w-4 h-4" />
+                    Duplicate
                   </Button>
                 </div>
 
