@@ -24,6 +24,7 @@ const ContextMenu = ({ isVisible, position, onClose, activeObject, onAction }) =
   if (activeObject?.type === 'image') {
     menuItems.splice(-3, 0, 
       { id: 'crop', label: 'Crop Image', icon: Crop },
+      { id: 'maskImageWithShape', label: 'Mask Image in Shape', icon: ImageIcon },
       { id: 'fillWithImage', label: 'Fill Shape', icon: ImageIcon },
       { id: 'setBackground', label: 'Set as Background', icon: ImageIcon },
       { type: 'separator' }

@@ -45,3 +45,4 @@ def get_sam_mask(image: Image.Image, get_session) -> Optional[np.ndarray]:
 
 
 
+

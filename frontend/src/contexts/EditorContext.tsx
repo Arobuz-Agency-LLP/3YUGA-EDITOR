@@ -894,29 +894,85 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
+    // Prevent masking if the image is already a background image
+    if ((activeObject as any).isBackgroundImage) {
+      toast.error('Cannot mask background images. Please select a regular image.');
+      return;
+    }
+
     const objects = canvas.getObjects();
     let shapeToUse: any | null = null;
+    
+    console.log('[Mask] Looking for shape among', objects.length, 'objects');
     
     for (let i = objects.length - 1; i >= 0; i--) {
       const obj: any = objects[i];
       
-      if (obj === activeObject || 
-          obj.id === 'grid-line' || 
-          obj.name === 'customShapePoint' || 
-          obj.name === 'customShapeLine') {
+      // Skip the active object (the image being masked)
+      if (obj === activeObject) {
+        console.log('[Mask] Skipping active object (image to mask)');
         continue;
       }
       
+      // Skip template elements, background images, and helper objects
+      if (obj.isTemplateImage || 
+          obj.isTemplateText || 
+          obj.isBackgroundImage || 
+          obj.id === 'grid-line' || 
+          obj.name === 'customShapePoint' || 
+          obj.name === 'customShapeLine') {
+        console.log('[Mask] Skipping template/background/helper:', obj.type, obj.name);
+        continue;
+      }
+      
+      // Skip template background rectangles (full canvas backgrounds)
+      const objName = (obj.name || '').toLowerCase();
+      const isBackgroundName = objName.includes('background') || 
+                               objName === 'background' ||
+                               objName === 'bg' ||
+                               objName === 'canvas background';
+      
+      // Check if it's a full-canvas background rectangle (covers entire canvas at 0,0)
+      const canvasWidth = canvas.getWidth();
+      const canvasHeight = canvas.getHeight();
+      const objWidth = (obj.width || 0) * (obj.scaleX || 1);
+      const objHeight = (obj.height || 0) * (obj.scaleY || 1);
+      const objLeft = obj.left || 0;
+      const objTop = obj.top || 0;
+      
+      const isFullCanvasBackground = obj.type === 'rect' && 
+                                     objLeft <= 0 && 
+                                     objTop <= 0 && 
+                                     objWidth >= canvasWidth * 0.9 && // Allow small margin
+                                     objHeight >= canvasHeight * 0.9 &&
+                                     (isBackgroundName || !obj.selectable); // Non-selectable or named background
+      
+      if (isFullCanvasBackground) {
+        console.log('[Mask] Skipping full-canvas background rectangle:', objName);
+        continue;
+      }
+      
+      // Only consider actual shape objects, not images or text
       const validTypes = ['path', 'rect', 'circle', 'ellipse', 'triangle', 'polygon'];
       
-      if (validTypes.includes(obj.type || '') || obj.selectable) {
+      // Make sure it's actually a shape, not an image or text that might be selectable
+      // Only consider selectable shapes (user-created shapes are selectable by default)
+      // This helps filter out template background elements that are non-selectable
+      if (validTypes.includes(obj.type || '') && 
+          obj.type !== 'image' && 
+          obj.type !== 'textbox' && 
+          obj.type !== 'text' &&
+          obj.selectable !== false) { // Only selectable shapes (true or undefined), skip explicitly non-selectable
+        console.log('[Mask] Found shape:', obj.type, obj.name, 'at', objLeft, objTop);
         shapeToUse = obj;
         break;
+      } else {
+        console.log('[Mask] Skipping object:', obj.type, 'selectable:', obj.selectable);
       }
     }
 
     if (!shapeToUse) {
-      toast.error('Please create a shape first');
+      toast.error('Please create a selectable shape first. Template background elements cannot be used for masking.');
       return;
     }
 
@@ -953,15 +1009,17 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         } as any);
       }
       
+      // Position clip path at the shape's position (not the image's position)
+      // This ensures the mask is correctly positioned where the shape was
+      const shapeLeft = (shapeToUse as any).left || 0;
+      const shapeTop = (shapeToUse as any).top || 0;
+      const shapeAngle = (shapeToUse as any).angle || 0;
+      
       // Position clip path absolutely so the mask stays fixed while moving the image
-      const imgLeft = (activeObject as any).left || 0;
-      const imgTop = (activeObject as any).top || 0;
-      const imgAngle = (activeObject as any).angle || 0;
-
       (clipShape as any).absolutePositioned = true;
-      (clipShape as any).left = imgLeft;
-      (clipShape as any).top = imgTop;
-      (clipShape as any).angle = imgAngle;
+      (clipShape as any).left = shapeLeft;
+      (clipShape as any).top = shapeTop;
+      (clipShape as any).angle = shapeAngle;
 
       canvas.remove(shapeToUse as any);
       (activeObject as any).clipPath = clipShape;
@@ -1036,27 +1094,74 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       toast.error('Please select an image first');
       return;
     }
+
+    // Prevent filling if the image is already a background image
+    if ((activeObject as any).isBackgroundImage) {
+      toast.error('Cannot use background images to fill shapes. Please select a regular image.');
+      return;
+    }
     
     const objects = canvas.getObjects();
     const validShapeTypes = ['rect', 'circle', 'triangle', 'ellipse', 'polygon', 'path', 'text', 'textbox'];
-    const shapes = objects.filter((obj: any) => 
-      validShapeTypes.includes(obj.type || '') && 
-      obj !== activeObject && 
-      obj.type !== 'image' &&
-      obj.id !== 'grid-line' &&
-      obj.name !== 'customShapePoint' &&
-      obj.name !== 'customShapeLine'
-    );
+    
+    // Filter shapes, excluding template elements, background images, and helper objects
+    let shapes = objects.filter((obj: any) => {
+      // Must be a valid shape type
+      if (!validShapeTypes.includes(obj.type || '')) return false;
+      
+      // Skip the active object (the image being used)
+      if (obj === activeObject) return false;
+      
+      // Skip images
+      if (obj.type === 'image') return false;
+      
+      // Skip template elements and background images
+      if (obj.isTemplateImage || obj.isTemplateText || obj.isBackgroundImage) return false;
+      
+      // Skip helper objects
+      if (obj.id === 'grid-line' || obj.name === 'customShapePoint' || obj.name === 'customShapeLine') return false;
+      
+      // Skip template background rectangles (full canvas backgrounds)
+      const objName = (obj.name || '').toLowerCase();
+      const isBackgroundName = objName.includes('background') || 
+                               objName === 'background' ||
+                               objName === 'bg' ||
+                               objName === 'canvas background';
+      
+      const canvasWidth = canvas.getWidth();
+      const canvasHeight = canvas.getHeight();
+      const objWidth = (obj.width || 0) * (obj.scaleX || 1);
+      const objHeight = (obj.height || 0) * (obj.scaleY || 1);
+      const objLeft = obj.left || 0;
+      const objTop = obj.top || 0;
+      
+      const isFullCanvasBackground = obj.type === 'rect' && 
+                                     objLeft <= 0 && 
+                                     objTop <= 0 && 
+                                     objWidth >= canvasWidth * 0.9 && 
+                                     objHeight >= canvasHeight * 0.9 &&
+                                     (isBackgroundName || !obj.selectable);
+      
+      if (isFullCanvasBackground) return false;
+      
+      // Only consider selectable shapes (user-created shapes)
+      if (obj.selectable === false) return false;
+      
+      return true;
+    });
     
     if (shapes.length === 0) {
-      toast.error('Please add a shape to the canvas to fill it');
+      toast.error('Please add a selectable shape to the canvas. Template background elements cannot be filled.');
       return;
     }
+    
+    console.log('[Fill Shape] Found', shapes.length, 'valid shapes to fill');
     
     let shapeToFill: any | null = null;
     
     if (shapes.length === 1) {
       shapeToFill = shapes[0];
+      console.log('[Fill Shape] Using single shape:', shapeToFill.type, shapeToFill.name);
     } else {
       const imageBounds = (activeObject as any).getBoundingRect();
       let maxOverlap = 0;
@@ -1121,18 +1226,38 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         repeat: 'no-repeat'
       });
       
+      console.log('[Fill Shape] Setting pattern on shape:', shapeToFill.type);
+      
+      // Set the pattern as fill
       (shapeToFill as any).set('fill', pattern);
-      canvas.remove(activeObject as any);
+      
+      // Ensure the shape is visible and rendered
+      (shapeToFill as any).set('opacity', 1);
+      (shapeToFill as any).set('visible', true);
+      
+      // Remove the image after using it to fill the shape
+      console.log('[Fill Shape] Removing image from canvas');
+      const imageToRemove = activeObject;
+      canvas.remove(imageToRemove as any);
+      
+      // Set the filled shape as active
       canvas.setActiveObject(shapeToFill as any);
       
+      // Force canvas to re-render with the pattern
       canvas.renderAll();
+      
+      // Verify the pattern was set
+      const shapeFill = (shapeToFill as any).fill;
+      console.log('[Fill Shape] Shape fill after setting pattern:', shapeFill ? 'Pattern set' : 'Pattern NOT set');
+      
       updateLayers();
       saveToHistory();
       toast.success('Shape filled with image!');
       
     } catch (error) {
-      console.error('Fill shape error:', error);
-      toast.error('Failed to fill shape with image');
+      console.error('[Fill Shape] Error:', error);
+      toast.error('Failed to fill shape with image. Please try again.');
+      // Don't set image as background on error - just show error
     }
   }, [canvas, activeObject, updateLayers, saveToHistory]);
 

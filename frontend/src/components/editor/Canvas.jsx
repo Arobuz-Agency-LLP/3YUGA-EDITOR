@@ -244,7 +244,7 @@ function importExcalidrawToFabric(canvas, scene) {
 }
 
 const Canvas = () => {
-  const { canvas, setCanvas, canvasRef, setActiveObject, saveToHistory, updateLayers, canvasSize, zoom, setZoom, backgroundColor, showGrid, canvasRotation, activeObject, undo, redo, isDrawingCustom, setIsDrawingCustom, customPath, setCustomPath, fillShapeWithImage, createBoard, switchBoard, boards } = useEditor();
+  const { canvas, setCanvas, canvasRef, setActiveObject, saveToHistory, updateLayers, canvasSize, zoom, setZoom, backgroundColor, showGrid, canvasRotation, activeObject, undo, redo, isDrawingCustom, setIsDrawingCustom, customPath, setCustomPath, fillShapeWithImage, maskImageWithCustomShape, createBoard, switchBoard, boards } = useEditor();
   const containerRef = useRef(null);
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0 });
   const [cropDialog, setCropDialog] = useState({ open: false, imageObject: null });
@@ -845,37 +845,108 @@ const Canvas = () => {
         
         
       case 'setBackground':
-        if (activeObject.type === 'image') {
-          const imgElement = activeObject.getElement();
-          FabricImage.fromURL(imgElement.src, { crossOrigin: 'anonymous' }).then((img) => {
-            const canvasWidth = canvas.width;
-            const canvasHeight = canvas.height;
-            const scaleX = canvasWidth / img.width;
-            const scaleY = canvasHeight / img.height;
-            const scale = Math.max(scaleX, scaleY);
-            
-            img.set({
-              left: 0,
-              top: 0,
-              scaleX: scale,
-              scaleY: scale,
-              selectable: false,
-              evented: false,
-              isBackgroundImage: true
-            });
-            
-            const existingBg = canvas.getObjects().find(obj => obj.isBackgroundImage);
-            if (existingBg) canvas.remove(existingBg);
-            
-            canvas.remove(activeObject);
-            canvas.add(img);
-            canvas.sendObjectToBack(img);
-            canvas.discardActiveObject();
-            canvas.renderAll();
-            updateLayers();
-            saveToHistory();
-            toast.success('Set as background');
-          });
+        if (activeObject && activeObject.type === 'image' && canvas) {
+            try {
+              console.log('[Set Background] Starting (context menu), activeObject:', activeObject);
+              
+              // Clone the existing image object instead of creating new from URL
+              activeObject.clone((clonedImg) => {
+                if (!clonedImg) {
+                  toast.error('Failed to clone image');
+                  return;
+                }
+                
+                console.log('[Set Background] Cloned image, dimensions:', clonedImg.width, clonedImg.height);
+                
+                const canvasWidth = canvas.width || 1080;
+                const canvasHeight = canvas.height || 1080;
+                
+                const actualCanvasWidth = canvasWidth / (canvas.getZoom() || 1);
+                const actualCanvasHeight = canvasHeight / (canvas.getZoom() || 1);
+                
+                // Get original image dimensions (not scaled)
+                const imgElement = activeObject.getElement();
+                const originalWidth = imgElement ? imgElement.naturalWidth || imgElement.width || activeObject.width : activeObject.width;
+                const originalHeight = imgElement ? imgElement.naturalHeight || imgElement.height || activeObject.height : activeObject.height;
+                
+                console.log('[Set Background] Original dimensions:', originalWidth, originalHeight);
+                
+                if (originalWidth === 0 || originalHeight === 0) {
+                  toast.error('Invalid image dimensions');
+                  return;
+                }
+                
+                // Calculate scale to cover canvas
+                const scaleX = actualCanvasWidth / originalWidth;
+                const scaleY = actualCanvasHeight / originalHeight;
+                const scale = Math.max(scaleX, scaleY);
+                
+                // Position at 0,0 to cover from top-left
+                const left = 0;
+                const top = 0;
+                
+                console.log('[Set Background] Setting properties:', { left, top, scale, originalWidth, originalHeight });
+                
+                // Remove existing background if any (but NOT the active object we're converting)
+                const existingBg = canvas.getObjects().find(obj => obj.isBackgroundImage && obj !== activeObject);
+                if (existingBg) {
+                  console.log('[Set Background] Removing existing background');
+                  canvas.remove(existingBg);
+                }
+                
+                // Set properties for background
+                clonedImg.set({
+                  left: left,
+                  top: top,
+                  scaleX: scale,
+                  scaleY: scale,
+                  selectable: false,
+                  evented: false,
+                  isBackgroundImage: true,
+                  objectCaching: false,
+                  visible: true,
+                  opacity: 1,
+                  originX: 'left',
+                  originY: 'top'
+                });
+                
+                // Update coordinates
+                clonedImg.setCoords();
+                
+                // Remove the original active object first
+                console.log('[Set Background] Removing original image');
+                canvas.remove(activeObject);
+                
+                // Add the cloned background image
+                console.log('[Set Background] Adding cloned background image');
+                canvas.add(clonedImg);
+                
+                // Send it to the very back
+                canvas.sendObjectToBack(clonedImg);
+                
+                // Verify it was added
+                const verifyAdded = canvas.getObjects().includes(clonedImg);
+                const imgIndex = canvas.getObjects().indexOf(clonedImg);
+                console.log('[Set Background] Image added:', verifyAdded, 'index:', imgIndex, 'visible:', clonedImg.visible, 'opacity:', clonedImg.opacity, 'left:', clonedImg.left, 'top:', clonedImg.top, 'scaleX:', clonedImg.scaleX, 'scaleY:', clonedImg.scaleY);
+                
+                if (!verifyAdded) {
+                  toast.error('Failed to add background image');
+                  return;
+                }
+                
+                // Force render
+                canvas.discardActiveObject();
+                canvas.renderAll();
+                updateLayers();
+                saveToHistory();
+                toast.success('Image set as background successfully!');
+              });
+            } catch (error) {
+              console.error('[Set Background] Error:', error);
+              toast.error('Failed to set image as background: ' + (error.message || 'Unknown error'));
+            }
+        } else {
+          toast.error('Please select an image first');
         }
         break;
         
@@ -905,6 +976,10 @@ const Canvas = () => {
           setContextMenu({ visible: false, x: 0, y: 0 });
           toast.success('Crop mode activated');
         }
+        break;
+        
+      case 'maskImageWithShape':
+        maskImageWithCustomShape();
         break;
         
       case 'fillWithImage':

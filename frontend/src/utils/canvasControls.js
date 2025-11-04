@@ -130,19 +130,64 @@ function createTextOverlays(words, backgroundImg, canvas) {
     const scaledWidth = Math.max(word.bbox.width * scaleX, 50);
     const scaledHeight = word.bbox.height * scaleY;
     
+    // Calculate font size to match original text exactly
+    // OCR bbox height typically includes descenders/ascenders, so use 85-90% for body text
+    // This ensures text size matches the original detected text
+    const fontSize = Math.max(10, Math.round(scaledHeight * 0.85));
+    
+    // Get text color - prioritize backend-estimated color which samples actual image pixels
+    // Backend uses estimate_text_color_near_bbox which analyzes the original text region
+    let textColor = '#000000'; // Default fallback
+    
+    // Try to get color from multiple sources (backend may add it to word or in _raw data)
+    if (word.color) {
+      textColor = word.color;
+    } else if (word.fill) {
+      textColor = word.fill;
+    } else if (word.textColor || word.text_color) {
+      textColor = word.textColor || word.text_color;
+    } else if (word.foregroundColor) {
+      textColor = word.foregroundColor;
+    } else if (word.ocrData && word.ocrData.color) {
+      textColor = word.ocrData.color;
+    }
+    
+    // If we have the raw OCR payload, check if color was estimated
+    // Backend's build_fabric_text_objects_from_lines adds fill color from estimate_text_color_near_bbox
+    
     const textbox = new fabric.Textbox(word.text, {
       left: scaledX,
       top: scaledY,
       width: scaledWidth,
-      fontSize: Math.max(14, scaledHeight * 0.7),
-      fill: '#000000',
-      fontFamily: 'Arial',
-      backgroundColor: 'rgba(255, 255, 255, 0.9)',
-      padding: 4,
-      borderColor: '#4A90E2',
-      cornerColor: '#4A90E2',
-      cornerSize: 8,
-      transparentCorners: false,
+      fontSize: fontSize,
+      fill: textColor,
+      fontFamily: word.fontFamily || word.font || 'Arial',
+      fontWeight: word.fontWeight || word.weight || 'normal',
+      // No background - text should appear directly on the image
+      backgroundColor: 'transparent',
+      padding: 0,
+      // No text decoration that might make it look like an overlay
+      underline: false,
+      linethrough: false,
+      overline: false,
+      // Ensure text renders crisp and natural
+      textDecoration: '',
+      // Hide borders and controls by default
+      borderColor: 'transparent',
+      cornerColor: 'transparent',
+      cornerSize: 0,
+      transparentCorners: true,
+      hasControls: false,
+      hasBorders: false,
+      // No border by default
+      stroke: null,
+      strokeWidth: 0,
+      // Allow movement and editing
+      lockMovementX: false,
+      lockMovementY: false,
+      lockRotation: true,
+      lockScalingX: false,
+      lockScalingY: false,
       name: `ocr-text-${index}`,
       isOCRText: true,
       ocrData: word,
@@ -150,8 +195,94 @@ function createTextOverlays(words, backgroundImg, canvas) {
       selectable: true,
       evented: true,
       editable: true,
-      // Make it stand out
-      shadow: 'rgba(0,0,0,0.3) 2px 2px 4px'
+      // No shadow - text should blend with image
+      shadow: null,
+      // Make text align naturally
+      originX: 'left',
+      originY: 'top',
+      // Better text rendering
+      objectCaching: false, // Disable caching for dynamic text updates
+      statefullCache: false,
+      // Hide textbox outline when not editing
+      excludeFromExport: false,
+      // Per-pixel detection for better accuracy
+      perPixelTargetFind: true,
+      targetFindTolerance: 5
+    });
+    
+    // Show VERY subtle indicator only when actively selected/editing
+    // Use minimal visual indicators to maintain seamless integration
+    textbox.on('selected', function() {
+      this.set({
+        hasBorders: true,
+        hasControls: true,
+        borderColor: 'rgba(74, 144, 226, 0.4)', // Very subtle
+        cornerColor: '#4A90E2',
+        cornerSize: 5,
+        stroke: 'rgba(74, 144, 226, 0.2)', // Very light stroke
+        strokeWidth: 1,
+        transparentCorners: false
+      });
+      canvas.renderAll();
+    });
+    
+    textbox.on('deselected', function() {
+      this.set({
+        hasBorders: false,
+        hasControls: false,
+        borderColor: 'transparent',
+        cornerColor: 'transparent',
+        cornerSize: 0,
+        stroke: null,
+        strokeWidth: 0,
+        transparentCorners: true
+      });
+      canvas.renderAll();
+    });
+    
+    // Show indicator only when actively editing
+    textbox.on('editing:entered', function() {
+      this.set({
+        hasBorders: true,
+        hasControls: true,
+        borderColor: 'rgba(74, 144, 226, 0.6)', // Slightly more visible when editing
+        cornerColor: '#4A90E2',
+        cornerSize: 6,
+        stroke: 'rgba(74, 144, 226, 0.3)',
+        strokeWidth: 1.5,
+        transparentCorners: false
+      });
+      canvas.renderAll();
+    });
+    
+    // Hide indicator when exiting edit mode - back to invisible
+    textbox.on('editing:exited', function() {
+      // Only hide if not selected
+      if (!this.isSelected) {
+        this.set({
+          hasBorders: false,
+          hasControls: false,
+          borderColor: 'transparent',
+          cornerColor: 'transparent',
+          cornerSize: 0,
+          stroke: null,
+          strokeWidth: 0,
+          transparentCorners: true
+        });
+      } else {
+        // If still selected, restore selection appearance
+        this.set({
+          hasBorders: true,
+          hasControls: true,
+          borderColor: 'rgba(74, 144, 226, 0.4)',
+          cornerColor: '#4A90E2',
+          cornerSize: 5,
+          stroke: 'rgba(74, 144, 226, 0.2)',
+          strokeWidth: 1,
+          transparentCorners: false
+        });
+      }
+      canvas.renderAll();
     });
     
     // Add double-click to edit handler
@@ -161,6 +292,10 @@ function createTextOverlays(words, backgroundImg, canvas) {
         textbox.selectAll();
       }
     });
+    
+    // NO hover effect - text should be completely invisible until selected
+    // This makes edited text appear seamlessly integrated into the image
+    // User can still click to select, but no visual indication on hover
     
     canvas.add(textbox);
     console.log('Added textbox:', textbox); // Debug log
@@ -398,7 +533,97 @@ export const processImageForEditing = async (imageObject, canvas, updateLayers, 
       homographyApplied: raw.homographyApplied // Store homography flag
     };
 
-    // Add overlays directly to canvas relative to the image position/scale
+    // Enhance word data with color, font, and size information from fabric objects
+    // Backend's build_fabric_text_objects_from_lines includes accurate color from estimate_text_color_near_bbox
+    // This ensures text properties match the original detected text in the image
+    if (raw.objects && Array.isArray(raw.objects) && data.text && data.text.words) {
+      raw.objects.forEach((fabricObj) => {
+        if (fabricObj.type === 'textbox' && fabricObj.fill) {
+          const objLeft = fabricObj.left || 0;
+          const objTop = fabricObj.top || 0;
+          const objFontSize = fabricObj.fontSize || 12;
+          
+          // Match fabric objects to words by position and size
+          data.text.words.forEach((word) => {
+            if (word.bbox) {
+              const wordX = word.bbox.x || 0;
+              const wordY = word.bbox.y || 0;
+              const wordHeight = word.bbox.height || 0;
+              
+              // Match if positions are close (within 15 pixels) and sizes are similar
+              const positionMatch = Math.abs(wordX - objLeft) < 15 && Math.abs(wordY - objTop) < 15;
+              const sizeMatch = Math.abs(wordHeight * 0.85 - objFontSize) < 10;
+              
+              if (positionMatch && sizeMatch) {
+                // Add color from backend-estimated color (most accurate)
+                if (fabricObj.fill && (!word.color && !word.fill)) {
+                  word.color = fabricObj.fill;
+                  word.fill = fabricObj.fill;
+                }
+                // Add font size if available
+                if (fabricObj.fontSize && !word.fontSize) {
+                  word.fontSize = fabricObj.fontSize;
+                }
+                // Add font family if available
+                if (fabricObj.fontFamily && !word.fontFamily) {
+                  word.fontFamily = fabricObj.fontFamily;
+                }
+              }
+            }
+          });
+        }
+      });
+    }
+
+    // Replace the original image with the cleaned base image (text removed)
+    if (raw.baseImage) {
+      try {
+        const cleanedImg = await fabric.FabricImage.fromURL(raw.baseImage, { 
+          crossOrigin: 'anonymous' 
+        });
+        
+        // Match the current image position and scale
+        cleanedImg.set({
+          left: imageObject.left,
+          top: imageObject.top,
+          scaleX: imageObject.scaleX,
+          scaleY: imageObject.scaleY,
+          angle: imageObject.angle,
+          opacity: imageObject.opacity,
+          name: imageObject.name,
+          _ocrPayload: imageObject._ocrPayload,
+          _ocrProcessed: true,
+          _beforeDataURL: imageObject._beforeDataURL
+        });
+        
+        // Replace the old image with cleaned one
+        canvas.remove(imageObject);
+        canvas.add(cleanedImg);
+        canvas.setActiveObject(cleanedImg);
+        
+        // Update reference to the cleaned image
+        const updatedImageObject = cleanedImg;
+        
+        // Add editable text overlays on top of cleaned image
+        if (data.text && data.text.words && data.text.words.length) {
+          createTextOverlays(data.text.words, updatedImageObject, canvas);
+        }
+        if (data.objects && data.objects.length) {
+          createObjectOverlays(data.objects, updatedImageObject, canvas);
+        }
+        
+        canvas.renderAll();
+        updateLayers();
+        saveToHistory();
+        toast.success(`Image processed! Found ${data.text?.words?.length || 0} text regions`);
+        return;
+      } catch (error) {
+        console.error('Error loading base image:', error);
+        // Fallback to original behavior if base image fails to load
+      }
+    }
+
+    // Fallback: Add overlays directly to canvas relative to the image position/scale
     if (data.text && data.text.words && data.text.words.length) {
       createTextOverlays(data.text.words, imageObject, canvas);
     }
@@ -438,3 +663,200 @@ async function toDataURLFromFile(file) {
     reader.readAsDataURL(file);
   });
 }
+
+/**
+ * Collect all edited text objects from canvas for a specific image
+ * @param {fabric.Object} imageObject - The image object to collect text from
+ * @param {fabric.Canvas} canvas - The fabric canvas
+ * @returns {Array} Array of text edit objects with position and styling
+ */
+export const collectEditedText = (imageObject, canvas) => {
+  if (!imageObject || !canvas) return [];
+  
+  const scaleX = imageObject.scaleX || 1;
+  const scaleY = imageObject.scaleY || 1;
+  const imageLeft = imageObject.left || 0;
+  const imageTop = imageObject.top || 0;
+  const imageWidth = (imageObject.width || 0) * scaleX;
+  const imageHeight = (imageObject.height || 0) * scaleY;
+  
+  // Get original image dimensions from API response
+  const imageSize = imageObject._ocrPayload?.imageSize || imageObject._ocrPayload?._raw?.imageSize;
+  const originalWidth = imageSize?.width || imageObject.width || 1080;
+  const originalHeight = imageSize?.height || imageObject.height || 1080;
+  
+  // Calculate scale factors to map canvas coordinates to original image coordinates
+  const scaleToOriginalX = originalWidth / imageWidth;
+  const scaleToOriginalY = originalHeight / imageHeight;
+  
+  const textEdits = [];
+  const objects = canvas.getObjects();
+  
+  objects.forEach((obj) => {
+    // Only collect OCR text objects that belong to this image
+    if (obj.isOCRText && obj.ocrData) {
+      // Check if this text is within the image bounds
+      const textLeft = obj.left || 0;
+      const textTop = obj.top || 0;
+      
+      // Check if text overlaps with image bounds
+      const textRight = textLeft + ((obj.width || 100) * (obj.scaleX || 1));
+      const textBottom = textTop + ((obj.height || 30) * (obj.scaleY || 1));
+      
+      // Check if text is near the image (within reasonable bounds)
+      const isNearImage = (
+        textRight >= imageLeft - 50 &&
+        textLeft <= imageLeft + imageWidth + 50 &&
+        textBottom >= imageTop - 50 &&
+        textTop <= imageTop + imageHeight + 50
+      );
+      
+      if (isNearImage) {
+        // Calculate position relative to image origin
+        const relativeX = textLeft - imageLeft;
+        const relativeY = textTop - imageTop;
+        
+        // Map to original image coordinates
+        const originalX = relativeX * scaleToOriginalX;
+        const originalY = relativeY * scaleToOriginalY;
+        
+        // Get text dimensions in original coordinates
+        const textWidth = ((obj.width || 100) * (obj.scaleX || 1)) * scaleToOriginalX;
+        const textHeight = ((obj.height || 30) * (obj.scaleY || 1)) * scaleToOriginalY;
+        
+        // Get text styling
+        const fill = obj.fill || '#000000';
+        const fontFamily = obj.fontFamily || 'Arial';
+        const fontSize = (obj.fontSize || 32) * scaleToOriginalY; // Scale font size
+        const fontWeight = obj.fontWeight || 'normal';
+        const opacity = (obj.opacity || 1.0);
+        
+        textEdits.push({
+          text: obj.text || obj.ocrData.text || '',
+          bbox: {
+            x: Math.max(0, Math.round(originalX)),
+            y: Math.max(0, Math.round(originalY)),
+            width: Math.max(10, Math.round(textWidth)),
+            height: Math.max(10, Math.round(textHeight))
+          },
+          fill: fill,
+          fontFamily: fontFamily,
+          fontSize: Math.max(8, Math.round(fontSize)),
+          fontWeight: fontWeight,
+          opacity: opacity,
+          // Keep reference to original OCR data
+          originalText: obj.ocrData.text
+        });
+      }
+    }
+  });
+  
+  return textEdits;
+};
+
+/**
+ * Integrate edited text into image via backend
+ * @param {fabric.Object} imageObject - The image object
+ * @param {fabric.Canvas} canvas - The fabric canvas
+ * @param {Function} updateLayers - Function to update layers
+ * @param {Function} saveToHistory - Function to save to history
+ * @returns {Promise} Promise that resolves when integration is complete
+ */
+export const integrateTextToImage = async (imageObject, canvas, updateLayers, saveToHistory) => {
+  if (!imageObject || !canvas || imageObject.type !== 'image') {
+    throw new Error('Invalid image object');
+  }
+  
+  try {
+    // Collect all edited text
+    const textEdits = collectEditedText(imageObject, canvas);
+    
+    if (textEdits.length === 0) {
+      toast.info('No text edits to integrate');
+      return;
+    }
+    
+    // Get original image source
+    const src = imageObject.getElement?.().src || imageObject.src || imageObject._originalUrl;
+    if (!src) {
+      throw new Error('Cannot get image source');
+    }
+    
+    // Fetch image as file
+    const response = await fetch(src, { mode: 'cors' });
+    const blob = await response.blob();
+    
+    // Create form data
+    const formData = new FormData();
+    formData.append('image', blob, 'image.png');
+    formData.append('textEdits', JSON.stringify(textEdits));
+    
+    // Send to backend
+    toast.info('Integrating text into image...');
+    
+    const integrateResponse = await fetch(`${BACKEND_URL}/integrate-text`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!integrateResponse.ok) {
+      const errorData = await integrateResponse.json();
+      throw new Error(errorData.error || 'Failed to integrate text');
+    }
+    
+    const data = await integrateResponse.json();
+    
+    if (!data.integratedImage) {
+      throw new Error('No integrated image returned');
+    }
+    
+    // Load the integrated image
+    const integratedImg = await fabric.FabricImage.fromURL(data.integratedImage, { 
+      crossOrigin: 'anonymous' 
+    });
+    
+    // Preserve image properties
+    integratedImg.set({
+      left: imageObject.left,
+      top: imageObject.top,
+      scaleX: imageObject.scaleX,
+      scaleY: imageObject.scaleY,
+      angle: imageObject.angle,
+      opacity: imageObject.opacity,
+      name: imageObject.name || 'integrated-image',
+      // Preserve OCR payload
+      _ocrPayload: imageObject._ocrPayload,
+      _ocrProcessed: imageObject._ocrProcessed,
+      _beforeDataURL: imageObject._beforeDataURL
+    });
+    
+    // Remove old image
+    canvas.remove(imageObject);
+    
+    // Remove all OCR text overlays for this image
+    const objects = canvas.getObjects();
+    objects.forEach((obj) => {
+      if (obj.isOCRText) {
+        canvas.remove(obj);
+      }
+    });
+    
+    // Add integrated image
+    canvas.add(integratedImg);
+    canvas.setActiveObject(integratedImg);
+    canvas.renderAll();
+    
+    updateLayers();
+    saveToHistory();
+    
+    toast.success(`Successfully integrated ${textEdits.length} text element(s)`);
+    
+    return integratedImg;
+  } catch (error) {
+    console.error('Text integration error:', error);
+    toast.error('Failed to integrate text', {
+      description: error.message
+    });
+    throw error;
+  }
+};
