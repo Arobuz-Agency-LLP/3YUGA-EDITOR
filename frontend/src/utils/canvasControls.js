@@ -19,22 +19,21 @@ export const handleImageUpload = async (file, canvas, updateLayers, saveToHistor
       throw new Error('Failed to process image');
     }
 
-    const raw = await response.json();
-    console.log('OCR Response:', raw); // Debug log
-    const normalized = normalizeOcrPayload(raw);
+    const data = await response.json();
+    console.log('OCR Response:', data); // Debug log
     
     // Set image as background
     const imageUrl = URL.createObjectURL(file);
     const backgroundImg = await loadImageAsBackground(imageUrl, canvas);
     
     // Create editable text overlays
-    if (normalized.text && normalized.text.words && normalized.text.words.length) {
-      createTextOverlays(normalized.text.words, backgroundImg, canvas);
+    if (data.text && data.text.words) {
+      createTextOverlays(data.text.words, backgroundImg, canvas);
     }
     
     // Create object overlays
-    if (normalized.objects && normalized.objects.length) {
-      createObjectOverlays(normalized.objects, backgroundImg, canvas);
+    if (data.objects) {
+      createObjectOverlays(data.objects, backgroundImg, canvas);
     }
 
     canvas.renderAll();
@@ -42,7 +41,7 @@ export const handleImageUpload = async (file, canvas, updateLayers, saveToHistor
     saveToHistory();
     
     URL.revokeObjectURL(imageUrl);
-    toast.success(`Image processed! Found ${normalized.text?.words?.length || 0} text regions`);
+    toast.success(`Image processed! Found ${data.text?.words?.length || 0} text regions`);
 
   } catch (error) {
     console.error('Image processing error:', error);
@@ -102,28 +101,6 @@ function createTextOverlays(words, backgroundImg, canvas) {
   
   words.forEach((word, index) => {
     console.log('Creating textbox for:', word.text, word.bbox); // Debug log
-    // Ensure bbox exists and has x,y,width,height (attempt to derive if not)
-    if (!word.bbox) {
-      const b = word.box || word.bounds || word.rect || word.region || null;
-      if (b && (Array.isArray(b) || (b.x != null && b.y != null))) {
-        if (Array.isArray(b)) {
-          // [x, y, w, h] or [x1, y1, x2, y2]
-          if (b.length >= 4) {
-            const x = b[0], y = b[1], a = b[2], d = b[3];
-            const w = (a > 0 && d > 0) ? a : Math.max(1, (a - x));
-            const h = (a > 0 && d > 0) ? d : Math.max(1, (d - y));
-            word.bbox = { x, y, width: Math.abs(w), height: Math.abs(h) };
-          }
-        } else {
-          const x = b.left ?? b.x ?? 0;
-          const y = b.top ?? b.y ?? 0;
-          const w = b.width ?? Math.max(1, (b.right ?? (x + 1)) - x);
-          const h = b.height ?? Math.max(1, (b.bottom ?? (y + 1)) - y);
-          word.bbox = { x, y, width: Math.abs(w), height: Math.abs(h) };
-        }
-      }
-    }
-    if (!word.bbox) return;
     
     const scaledX = offsetX + (word.bbox.x * scaleX);
     const scaledY = offsetY + (word.bbox.y * scaleY);
@@ -288,91 +265,93 @@ export const updateOCRTextProperty = (activeObject, property, value, canvas, sav
   }
 };
 
-// Normalize backend OCR payload into { text: { words: [{ text, bbox:{x,y,width,height}}] }, objects: [...] , _raw }
-function normalizeOcrPayload(raw) {
-  const wordsIn = (raw?.text?.words || raw?.words || raw?.ocr?.words || raw?.texts || []);
-  let words = Array.isArray(wordsIn) ? wordsIn.slice() : [];
-  if (Array.isArray(raw?.lines) && words.length === 0) {
-    try { words = raw.lines.flatMap(l => l.words || []).filter(Boolean); } catch (_) {}
+// Helper function to convert dataURL to Blob
+function dataURLToBlob(dataURL) {
+  const arr = dataURL.split(',');
+  const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/png';
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
   }
-  // Coerce each word into { text, bbox:{x,y,width,height} }
-  words = words.map((w) => {
-    const text = (w.text ?? w.value ?? w.string ?? w.content ?? '');
-    let bbox = w.bbox || w.box || w.bounds || w.rect || w.region || null;
-    if (!bbox && Array.isArray(w)) bbox = w; // sometimes raw array
-    let outBox = null;
-    if (bbox) {
-      if (Array.isArray(bbox) && bbox.length >= 4) {
-        const x = bbox[0], y = bbox[1], a = bbox[2], d = bbox[3];
-        const wv = (a > 0 && d > 0) ? a : Math.max(1, (a - x));
-        const hv = (a > 0 && d > 0) ? d : Math.max(1, (d - y));
-        outBox = { x, y, width: Math.abs(wv), height: Math.abs(hv) };
-      } else if (typeof bbox === 'object') {
-        const x = bbox.left ?? bbox.x ?? 0;
-        const y = bbox.top ?? bbox.y ?? 0;
-        const width = bbox.width ?? Math.max(1, (bbox.right ?? (x + 1)) - x);
-        const height = bbox.height ?? Math.max(1, (bbox.bottom ?? (y + 1)) - y);
-        outBox = { x, y, width: Math.abs(width), height: Math.abs(height) };
-      }
-    }
-    return { text, bbox: outBox };
-  }).filter(w => w && w.text != null && w.bbox);
-
-  const objects = (raw?.objects || raw?.detections || raw?.labels || []).map((o) => {
-    let bbox = o.bbox || o.box || o.bounds || o.rect || null;
-    if (bbox) {
-      if (Array.isArray(bbox) && bbox.length >= 4) {
-        const x = bbox[0], y = bbox[1], a = bbox[2], d = bbox[3];
-        const wv = (a > 0 && d > 0) ? a : Math.max(1, (a - x));
-        const hv = (a > 0 && d > 0) ? d : Math.max(1, (d - y));
-        bbox = { x, y, width: Math.abs(wv), height: Math.abs(hv) };
-      } else if (typeof bbox === 'object') {
-        const x = bbox.left ?? bbox.x ?? 0;
-        const y = bbox.top ?? bbox.y ?? 0;
-        const width = bbox.width ?? Math.max(1, (bbox.right ?? (x + 1)) - x);
-        const height = bbox.height ?? Math.max(1, (bbox.bottom ?? (y + 1)) - y);
-        bbox = { x, y, width: Math.abs(width), height: Math.abs(height) };
-      }
-    }
-    return { ...o, bbox };
-  }).filter(o => o && o.bbox);
-
-  // Preserve all fields from raw response including baseImage, imageSize, etc.
-  return { 
-    text: { words }, 
-    objects, 
-    _raw: raw,
-    // Preserve important fields from raw response
-    baseImage: raw?.baseImage,
-    imageSize: raw?.imageSize,
-    homographyApplied: raw?.homographyApplied
-  };
+  return new Blob([u8arr], { type: mime });
 }
 
-// Selection-based flow: call when a user selects an image on the canvas or presses Make Editable
+// Helper function to export a Fabric image object to blob
+function exportImageObjectToBlob(imageObject) {
+  return new Promise((resolve, reject) => {
+    try {
+      // Get the image element
+      const imgElement = imageObject.getElement();
+      if (!imgElement) {
+        reject(new Error('Image element not found'));
+        return;
+      }
+
+      // Create a temporary canvas to export the image
+      const tempCanvas = document.createElement('canvas');
+      const ctx = tempCanvas.getContext('2d');
+      
+      // Set canvas size to match image dimensions (account for scale)
+      const actualWidth = (imageObject.width || imgElement.width || 0) * (imageObject.scaleX || 1);
+      const actualHeight = (imageObject.height || imgElement.height || 0) * (imageObject.scaleY || 1);
+      
+      if (actualWidth === 0 || actualHeight === 0) {
+        // Fallback: use natural dimensions
+        tempCanvas.width = imgElement.naturalWidth || imgElement.width || 800;
+        tempCanvas.height = imgElement.naturalHeight || imgElement.height || 600;
+      } else {
+        tempCanvas.width = actualWidth;
+        tempCanvas.height = actualHeight;
+      }
+
+      // Draw image on canvas
+      ctx.drawImage(imgElement, 0, 0, tempCanvas.width, tempCanvas.height);
+      
+      // Convert to blob
+      tempCanvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('Failed to convert canvas to blob'));
+        }
+      }, 'image/png');
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 export const processImageForEditing = async (imageObject, canvas, updateLayers, saveToHistory) => {
+  if (!imageObject || imageObject.type !== 'image' || !canvas) {
+    toast.error('Please select an image to process');
+    return;
+  }
+
+  // Check if already processed
+  if (imageObject.isBackgroundImage) {
+    toast.error('Cannot process background images');
+    return;
+  }
+
   try {
-    if (!imageObject || imageObject.isBackgroundImage) return;
-    if (imageObject._ocrProcessed || imageObject._ocrRequested) return;
-    imageObject._ocrRequested = true;
+    // Store original image properties
+    const originalLeft = imageObject.left;
+    const originalTop = imageObject.top;
+    const originalScaleX = imageObject.scaleX || 1;
+    const originalScaleY = imageObject.scaleY || 1;
+    const originalAngle = imageObject.angle || 0;
+    const originalOpacity = imageObject.opacity || 1;
+    const originalName = imageObject.name;
 
-    const src = imageObject.getElement?.().src || imageObject.src || imageObject._originalUrl;
-    if (!src) {
-      imageObject._ocrRequested = false;
-      return;
-    }
-
-    const file = await fetchImageAsFile(src);
-    if (!file) {
-      imageObject._ocrRequested = false;
-      return;
-    }
-
-    // Keep before image (original)
-    const beforeDataURL = await toDataURLFromFile(file);
-
+    // Export image to blob
+    const blob = await exportImageObjectToBlob(imageObject);
+    
+    // Create FormData and send to backend
     const formData = new FormData();
-    formData.append('image', file);
+    formData.append('image', blob, 'image.png');
+    formData.append('text_clean_method', 'fill'); // or 'blur'
 
     const response = await fetch(`${BACKEND_URL}/make-editable`, {
       method: 'POST',
@@ -383,58 +362,57 @@ export const processImageForEditing = async (imageObject, canvas, updateLayers, 
       throw new Error('Failed to process image');
     }
 
-    const raw = await response.json();
-    const data = normalizeOcrPayload(raw);
+    const data = await response.json();
+    console.log('OCR Response:', data);
 
-    // Attach payload to the image itself for sidebar display
-    // Store both normalized data and full raw response for editing
-    imageObject._ocrProcessed = true;
-    imageObject._beforeDataURL = beforeDataURL;
-    imageObject._ocrPayload = {
-      ...data,
-      _raw: raw, // Store full raw API response
-      baseImage: raw.baseImage, // Store base64 cleaned image
-      imageSize: raw.imageSize, // Store image dimensions
-      homographyApplied: raw.homographyApplied // Store homography flag
-    };
+    // Load cleaned base image
+    const cleanedImg = await fabric.FabricImage.fromURL(data.baseImage, { 
+      crossOrigin: 'anonymous' 
+    });
+    
+    // Match the current image position and scale
+    cleanedImg.set({
+      left: originalLeft,
+      top: originalTop,
+      scaleX: originalScaleX,
+      scaleY: originalScaleY,
+      angle: originalAngle,
+      opacity: originalOpacity,
+      name: originalName,
+      // Store OCR payload for later use
+      _ocrPayload: {
+        baseImage: data.baseImage,
+        text: data.text,
+        objects: data.objects,
+        imageSize: data.imageSize,
+        _raw: data
+      },
+      _ocrProcessed: true
+    });
 
-    // Add overlays directly to canvas relative to the image position/scale
+    // Replace the old image with cleaned one
+    canvas.remove(imageObject);
+    canvas.add(cleanedImg);
+    canvas.setActiveObject(cleanedImg);
+    
+    // Update reference to the cleaned image
+    const updatedImageObject = cleanedImg;
+
+    // Add editable text overlays on top of cleaned image
     if (data.text && data.text.words && data.text.words.length) {
-      createTextOverlays(data.text.words, imageObject, canvas);
+      createTextOverlays(data.text.words, updatedImageObject, canvas);
     }
     if (data.objects && data.objects.length) {
-      createObjectOverlays(data.objects, imageObject, canvas);
+      createObjectOverlays(data.objects, updatedImageObject, canvas);
     }
 
-    canvas.setActiveObject(imageObject);
     canvas.renderAll();
     updateLayers();
     saveToHistory();
+    
     toast.success(`Image processed! Found ${data.text?.words?.length || 0} text regions`);
   } catch (error) {
-    console.error('Image processing error:', error);
-    toast.error('Failed to process image', { description: error.message });
-  } finally {
-    if (imageObject) imageObject._ocrRequested = false;
+    console.error('Error processing image for editing:', error);
+    toast.error('Failed to process image: ' + (error.message || 'Unknown error'));
   }
 };
-
-// Helpers
-async function fetchImageAsFile(src) {
-  try {
-    const res = await fetch(src, { mode: 'cors' });
-    const blob = await res.blob();
-    const ext = blob.type && blob.type.indexOf('/') > 0 ? blob.type.split('/')[1] : 'png';
-    return new File([blob], `selected.${ext}`, { type: blob.type || 'image/png' });
-  } catch (_) {
-    return null;
-  }
-}
-
-async function toDataURLFromFile(file) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.readAsDataURL(file);
-  });
-}
