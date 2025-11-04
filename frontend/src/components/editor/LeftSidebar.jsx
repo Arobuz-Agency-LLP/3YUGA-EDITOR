@@ -1256,7 +1256,6 @@ const backgroundColors = [
   'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
   'linear-gradient(135deg, #ff6e7f 0%, #bfe9ff 100%)',
   'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)',
-  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
   'linear-gradient(135deg, #fdfcfb 0%, #e2d1c3 100%)',
   'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)',
   'linear-gradient(135deg, #fddb92 0%, #d1fdff 100%)',
@@ -1633,9 +1632,9 @@ const backgroundColors = [
                       />
                     </div>
                     <div className="grid grid-cols-6 gap-2">
-                      {backgroundColors.map((color) => (
+                      {backgroundColors.map((color, index) => (
                         <motion.button
-                          key={color}
+                          key={`${color}-${index}`}
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.95 }}
                           onClick={() => handleBackgroundColor(color)}
