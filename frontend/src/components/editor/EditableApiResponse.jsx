@@ -5,16 +5,17 @@ import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { ScrollArea } from '../ui/scroll-area';
-import { Edit3, Save, X, Image as ImageIcon, Type, Package, Wand2 } from 'lucide-react';
+import { Edit3, Save, X, Image as ImageIcon, Type, Package, Wand2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as fabric from 'fabric';
-import { processImageForEditing } from '../../utils/canvasControls';
+import { processImageForEditing, integrateTextToImage } from '../../utils/canvasControls';
 
 const EditableApiResponse = () => {
   const { canvas, activeObject, updateLayers, saveToHistory } = useEditor();
   const [editingWordIndex, setEditingWordIndex] = useState(null);
   const [editedWords, setEditedWords] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [integrating, setIntegrating] = useState(false);
 
   // Get the API response from active object
   const apiResponse = activeObject && activeObject.type === 'image' && activeObject._ocrPayload 
@@ -97,57 +98,128 @@ const EditableApiResponse = () => {
   };
 
   const saveWordEdit = (index) => {
-    if (!canvas || !activeObject) return;
+    if (!canvas || !activeObject) {
+      toast.error('Canvas or active object not available');
+      return;
+    }
 
     const editedWord = editedWords[index];
     const originalWord = words[index];
     
-    // Find the corresponding textbox on canvas
-    const textbox = canvas.getObjects().find(obj => 
-      obj.isOCRText && 
-      obj.ocrData && 
-      obj.ocrData.text === originalWord.text &&
-      Math.abs(obj.left - (activeObject.left + originalWord.bbox.x * activeObject.scaleX)) < 5 &&
-      Math.abs(obj.top - (activeObject.top + originalWord.bbox.y * activeObject.scaleY)) < 5
-    );
+    if (!editedWord || !originalWord) {
+      toast.error('Invalid word data');
+      return;
+    }
+    
+    // Find the corresponding textbox on canvas - more flexible matching
+    let textbox = null;
+    
+    // Try multiple strategies to find the textbox
+    const allTextboxes = canvas.getObjects().filter(obj => obj.isOCRText && obj.ocrData);
+    
+    // Strategy 1: Match by original text and approximate position
+    if (!textbox) {
+      const scaleX = activeObject.scaleX || 1;
+      const scaleY = activeObject.scaleY || 1;
+      const expectedX = activeObject.left + (originalWord.bbox?.x || 0) * scaleX;
+      const expectedY = activeObject.top + (originalWord.bbox?.y || 0) * scaleY;
+      
+      textbox = allTextboxes.find(obj => {
+        const textMatches = obj.ocrData?.text === originalWord.text || 
+                           obj.text === originalWord.text ||
+                           (obj.ocrData && JSON.stringify(obj.ocrData) === JSON.stringify(originalWord));
+        const positionMatches = Math.abs((obj.left || 0) - expectedX) < 20 && 
+                                Math.abs((obj.top || 0) - expectedY) < 20;
+        return textMatches && positionMatches;
+      });
+    }
+    
+    // Strategy 2: Match by index if ocrData has a reference
+    if (!textbox && allTextboxes.length > index) {
+      textbox = allTextboxes[index];
+    }
+    
+    // Strategy 3: Match by closest position to expected location
+    if (!textbox && allTextboxes.length > 0) {
+      const scaleX = activeObject.scaleX || 1;
+      const scaleY = activeObject.scaleY || 1;
+      const expectedX = activeObject.left + (originalWord.bbox?.x || 0) * scaleX;
+      const expectedY = activeObject.top + (originalWord.bbox?.y || 0) * scaleY;
+      
+      let closestDistance = Infinity;
+      allTextboxes.forEach(obj => {
+        const distance = Math.sqrt(
+          Math.pow((obj.left || 0) - expectedX, 2) + 
+          Math.pow((obj.top || 0) - expectedY, 2)
+        );
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          textbox = obj;
+        }
+      });
+      
+      // Only use if reasonably close (within 100px)
+      if (closestDistance > 100) {
+        textbox = null;
+      }
+    }
 
     if (textbox) {
-      // Update textbox text
-      if (editedWord.text !== originalWord.text) {
-        textbox.set('text', editedWord.text);
+      try {
+        // Update textbox text
+        if (editedWord.text !== undefined && editedWord.text !== textbox.text) {
+          textbox.set('text', editedWord.text);
+        }
+
+        // Update position if bbox changed
+        if (editedWord.bbox && originalWord.bbox) {
+          const scaleX = activeObject.scaleX || 1;
+          const scaleY = activeObject.scaleY || 1;
+          const newX = activeObject.left + (editedWord.bbox.x * scaleX);
+          const newY = activeObject.top + (editedWord.bbox.y * scaleY);
+          const newWidth = Math.max(editedWord.bbox.width * scaleX, 50);
+          const newHeight = editedWord.bbox.height * scaleY;
+
+          textbox.set({
+            left: newX,
+            top: newY,
+            width: newWidth,
+            fontSize: Math.max(14, newHeight * 0.7)
+          });
+        }
+
+        // Update ocrData to reflect the edited word
+        if (textbox.ocrData) {
+          textbox.ocrData = { ...textbox.ocrData, ...editedWord };
+        }
+
+        canvas.renderAll();
+        updateLayers();
+        saveToHistory();
+
+        // Update the stored payload
+        if (activeObject._ocrPayload && activeObject._ocrPayload.text && activeObject._ocrPayload.text.words) {
+          activeObject._ocrPayload.text.words[index] = editedWord;
+        }
+        
+        setEditingWordIndex(null);
+        toast.success('Word updated successfully');
+      } catch (error) {
+        console.error('Error updating word:', error);
+        toast.error('Failed to update word: ' + error.message);
       }
-
-      // Update position if bbox changed
-      if (editedWord.bbox && originalWord.bbox) {
-        const scaleX = activeObject.scaleX || 1;
-        const scaleY = activeObject.scaleY || 1;
-        const newX = activeObject.left + (editedWord.bbox.x * scaleX);
-        const newY = activeObject.top + (editedWord.bbox.y * scaleY);
-        const newWidth = Math.max(editedWord.bbox.width * scaleX, 50);
-        const newHeight = editedWord.bbox.height * scaleY;
-
-        textbox.set({
-          left: newX,
-          top: newY,
-          width: newWidth,
-          fontSize: Math.max(14, newHeight * 0.7)
-        });
+    } else {
+      console.warn('Could not find textbox. Available textboxes:', allTextboxes.length);
+      console.warn('Original word:', originalWord);
+      console.warn('Edited word:', editedWord);
+      
+      // Update the payload even if we can't find the textbox
+      if (activeObject._ocrPayload && activeObject._ocrPayload.text && activeObject._ocrPayload.text.words) {
+        activeObject._ocrPayload.text.words[index] = editedWord;
       }
-
-      // Update ocrData
-      textbox.ocrData = editedWord;
-
-      canvas.renderAll();
-      updateLayers();
-      saveToHistory();
-
-      // Update the stored payload
-      activeObject._ocrPayload.text.words[index] = editedWord;
       
       setEditingWordIndex(null);
-      toast.success('Word updated successfully');
-    } else {
-      toast.error('Could not find corresponding textbox on canvas');
+      toast.warning('Word data saved, but textbox not found on canvas. Changes will apply when you finalize & integrate.');
     }
   };
 
@@ -188,6 +260,25 @@ const EditableApiResponse = () => {
       });
   };
 
+  const handleIntegrateText = async () => {
+    if (!canvas || !activeObject || activeObject.type !== 'image') {
+      toast.error('Please select an image');
+      return;
+    }
+
+    try {
+      setIntegrating(true);
+      await integrateTextToImage(activeObject, canvas, updateLayers, saveToHistory);
+      // Force re-render to update the UI
+      setEditedWords([]);
+      setEditingWordIndex(null);
+    } catch (error) {
+      console.error('Integration error:', error);
+    } finally {
+      setIntegrating(false);
+    }
+  };
+
   return (
     <ScrollArea className="h-full">
       <div className="space-y-4">
@@ -202,17 +293,37 @@ const EditableApiResponse = () => {
               Size: {imageSize.width} × {imageSize.height}px
             </div>
           )}
-          {baseImage && (
+          <div className="flex flex-col gap-2 mt-2">
+            {baseImage && (
+              <Button
+                onClick={applyBaseImage}
+                variant="outline"
+                size="sm"
+                className="w-full gap-2"
+              >
+                <ImageIcon className="w-3 h-3" />
+                Apply Base Image (Cleaned)
+              </Button>
+            )}
             <Button
-              onClick={applyBaseImage}
-              variant="outline"
+              onClick={handleIntegrateText}
+              disabled={integrating}
               size="sm"
-              className="w-full gap-2 mt-2"
+              className="w-full gap-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-600 hover:to-purple-600 border-0"
             >
-              <ImageIcon className="w-3 h-3" />
-              Apply Base Image (Cleaned)
+              {integrating ? (
+                <>
+                  <Wand2 className="w-3 h-3 animate-spin" />
+                  Integrating...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-3 h-3" />
+                  Finalize & Integrate Text
+                </>
+              )}
             </Button>
-          )}
+          </div>
         </div>
 
         {/* Text Words Section */}

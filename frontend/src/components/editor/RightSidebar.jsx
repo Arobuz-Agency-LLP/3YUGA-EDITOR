@@ -376,6 +376,8 @@ const RightSidebar = () => {
   };
 
 const setAsBackground = () => {
+    console.log('[Set Background] Function called');
+    
     if (!activeObject) {
       toast.error('Please select an image first');
       return;
@@ -392,105 +394,131 @@ const setAsBackground = () => {
     }
     
     try {
-      console.log('[Set Background] Starting, activeObject:', activeObject);
+      console.log('[Set Background] Starting process');
       
-      // Use toObject and enlivenObjects (same approach as duplicateObject)
-      const objectData = activeObject.toObject();
+      // Get original image dimensions
+      const imgElement = activeObject.getElement();
+      const originalWidth = imgElement ? imgElement.naturalWidth || imgElement.width || activeObject.width : activeObject.width;
+      const originalHeight = imgElement ? imgElement.naturalHeight || imgElement.height || activeObject.height : activeObject.height;
       
-      fabric.util.enlivenObjects([objectData], (objects) => {
-        const clonedImg = objects[0];
-        
-        if (!clonedImg) {
-          toast.error('Failed to clone image');
-          return;
+      console.log('[Set Background] Original dimensions:', originalWidth, originalHeight);
+      
+      if (originalWidth === 0 || originalHeight === 0) {
+        toast.error('Invalid image dimensions');
+        return;
+      }
+      
+      // Get canvas dimensions
+      const canvasWidth = canvas.width || 1080;
+      const canvasHeight = canvas.height || 1080;
+      const actualCanvasWidth = canvasWidth / (canvas.getZoom() || 1);
+      const actualCanvasHeight = canvasHeight / (canvas.getZoom() || 1);
+      
+      // Calculate scale to cover entire canvas
+      const scaleX = actualCanvasWidth / originalWidth;
+      const scaleY = actualCanvasHeight / originalHeight;
+      const scale = Math.max(scaleX, scaleY);
+      
+      console.log('[Set Background] Scale calculated:', scale);
+      
+      // Remove existing background if any (but NOT the active object we're converting)
+      const existingBg = canvas.getObjects().find(obj => obj.isBackgroundImage && obj !== activeObject);
+      if (existingBg) {
+        console.log('[Set Background] Removing existing background');
+        canvas.remove(existingBg);
+      }
+      
+      // Get the image source URL for reloading
+      let imgSrc = imgElement?.src || activeObject.getSrc?.() || null;
+      
+      // If no src found, try to get data URL from canvas
+      if (!imgSrc && imgElement) {
+        try {
+          // Create a temporary canvas to get data URL
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = imgElement.width || activeObject.width;
+          tempCanvas.height = imgElement.height || activeObject.height;
+          const ctx = tempCanvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(imgElement, 0, 0);
+            imgSrc = tempCanvas.toDataURL();
+          }
+        } catch (e) {
+          console.warn('[Set Background] Could not create data URL:', e);
         }
-        
-        console.log('[Set Background] Cloned image, dimensions:', clonedImg.width, clonedImg.height);
-        
-        const canvasWidth = canvas.width || 1080;
-        const canvasHeight = canvas.height || 1080;
-        
-        const actualCanvasWidth = canvasWidth / (canvas.getZoom() || 1);
-        const actualCanvasHeight = canvasHeight / (canvas.getZoom() || 1);
-        
-        // Get original image dimensions (not scaled)
-        const imgElement = activeObject.getElement();
-        const originalWidth = imgElement ? imgElement.naturalWidth || imgElement.width || activeObject.width : activeObject.width;
-        const originalHeight = imgElement ? imgElement.naturalHeight || imgElement.height || activeObject.height : activeObject.height;
-        
-        console.log('[Set Background] Original dimensions:', originalWidth, originalHeight);
-        
-        if (originalWidth === 0 || originalHeight === 0) {
-          toast.error('Invalid image dimensions');
-          return;
-        }
-        
-        // Calculate scale to cover canvas
-        const scaleX = actualCanvasWidth / originalWidth;
-        const scaleY = actualCanvasHeight / originalHeight;
-        const scale = Math.max(scaleX, scaleY);
-        
-        // Position at 0,0 to cover from top-left
-        const left = 0;
-        const top = 0;
-        
-        console.log('[Set Background] Setting properties:', { left, top, scale, originalWidth, originalHeight });
-        
-        // Remove existing background if any (but NOT the active object we're converting)
-        const existingBg = canvas.getObjects().find(obj => obj.isBackgroundImage && obj !== activeObject);
-        if (existingBg) {
-          console.log('[Set Background] Removing existing background');
-          canvas.remove(existingBg);
-        }
-        
-        // Remove the original active object first
-        console.log('[Set Background] Removing original image');
-        canvas.remove(activeObject);
-        
-        // Set properties for background
-        clonedImg.set({
-          left: left,
-          top: top,
-          scaleX: scale,
-          scaleY: scale,
-          selectable: false,
-          evented: false,
-          isBackgroundImage: true,
-          objectCaching: false,
-          visible: true,
-          opacity: 1,
-          originX: 'left',
-          originY: 'top'
+      }
+      
+      if (!imgSrc) {
+        console.error('[Set Background] No image source found');
+        toast.error('Could not find image source');
+        return;
+      }
+      
+      console.log('[Set Background] Loading image from source:', imgSrc.substring(0, 50) + '...');
+      
+      // Load the image directly from source (most reliable method)
+      fabric.FabricImage.fromURL(imgSrc, { crossOrigin: 'anonymous' })
+        .then((img) => {
+          if (!img) {
+            console.error('[Set Background] Failed to load image from URL');
+            toast.error('Failed to load image');
+            return;
+          }
+          
+          console.log('[Set Background] Image loaded, setting properties');
+          
+          // Set properties for background
+          img.set({
+            left: 0,
+            top: 0,
+            scaleX: scale,
+            scaleY: scale,
+            selectable: false,
+            evented: false,
+            isBackgroundImage: true,
+            objectCaching: false,
+            visible: true,
+            opacity: activeObject.opacity || 1,
+            originX: 'left',
+            originY: 'top'
+          });
+          
+          // Update coordinates
+          img.setCoords();
+          
+          // Remove the original active object
+          console.log('[Set Background] Removing original image');
+          canvas.remove(activeObject);
+          
+          // Add the new background image
+          console.log('[Set Background] Adding background image');
+          canvas.add(img);
+          
+          // Send it to the very back
+          canvas.sendObjectToBack(img);
+          
+          // Verify it was added
+          const verifyAdded = canvas.getObjects().includes(img);
+          console.log('[Set Background] Image added:', verifyAdded, 'visible:', img.visible, 'opacity:', img.opacity);
+          
+          if (!verifyAdded) {
+            toast.error('Failed to add background image');
+            return;
+          }
+          
+          // Force render
+          canvas.discardActiveObject();
+          canvas.renderAll();
+          updateLayers();
+          saveToHistory();
+          
+          toast.success('Image set as background successfully!');
+        })
+        .catch((error) => {
+          console.error('[Set Background] Failed to load image:', error);
+          toast.error('Failed to load image: ' + (error.message || 'Unknown error'));
         });
-        
-        // Update coordinates
-        clonedImg.setCoords();
-        
-        // Add the cloned background image
-        console.log('[Set Background] Adding cloned background image');
-        canvas.add(clonedImg);
-        
-        // Send it to the very back
-        canvas.sendObjectToBack(clonedImg);
-        
-        // Verify it was added
-        const verifyAdded = canvas.getObjects().includes(clonedImg);
-        const imgIndex = canvas.getObjects().indexOf(clonedImg);
-        console.log('[Set Background] Image added:', verifyAdded, 'index:', imgIndex, 'visible:', clonedImg.visible, 'opacity:', clonedImg.opacity, 'left:', clonedImg.left, 'top:', clonedImg.top, 'scaleX:', clonedImg.scaleX, 'scaleY:', clonedImg.scaleY);
-        
-        if (!verifyAdded) {
-          toast.error('Failed to add background image');
-          return;
-        }
-        
-        // Force render
-        canvas.discardActiveObject();
-        canvas.renderAll();
-        updateLayers();
-        saveToHistory();
-        
-        toast.success('Image set as background successfully!');
-      });
+      
     } catch (error) {
       console.error('[Set Background] Error:', error);
       toast.error('Failed to set image as background: ' + (error.message || 'Unknown error'));
@@ -618,8 +646,8 @@ const setAsBackground = () => {
                         />
                         <Input
                           type="number"
-                          value={properties.fontSize}
-                          onChange={(e) => updateProperty('fontSize', parseInt(e.target.value))}
+                          value={properties.fontSize ?? 32}
+                          onChange={(e) => updateProperty('fontSize', parseInt(e.target.value) || 32)}
                           className="w-16"
                         />
                       </div>
@@ -799,8 +827,8 @@ const setAsBackground = () => {
                       />
                       <Input
                         type="number"
-                        value={properties.strokeWidth}
-                        onChange={(e) => updateProperty('strokeWidth', parseInt(e.target.value))}
+                        value={properties.strokeWidth ?? 0}
+                        onChange={(e) => updateProperty('strokeWidth', parseInt(e.target.value) || 0)}
                         className="w-16"
                       />
                     </div>
@@ -820,8 +848,8 @@ const setAsBackground = () => {
                     />
                     <Input
                       type="number"
-                      value={Math.round(properties.opacity)}
-                      onChange={(e) => updateProperty('opacity', parseInt(e.target.value))}
+                      value={Math.round(properties.opacity ?? 100)}
+                      onChange={(e) => updateProperty('opacity', parseInt(e.target.value) || 100)}
                       className="w-16"
                     />
                   </div>
@@ -962,8 +990,8 @@ const setAsBackground = () => {
                           />
                           <Input
                             type="number"
-                            value={properties.brightness}
-                            onChange={(e) => updateProperty('brightness', parseInt(e.target.value))}
+                            value={properties.brightness ?? 0}
+                            onChange={(e) => updateProperty('brightness', parseInt(e.target.value) || 0)}
                             className="w-16"
                           />
                         </div>
@@ -982,8 +1010,8 @@ const setAsBackground = () => {
                           />
                           <Input
                             type="number"
-                            value={properties.contrast}
-                            onChange={(e) => updateProperty('contrast', parseInt(e.target.value))}
+                            value={properties.contrast ?? 0}
+                            onChange={(e) => updateProperty('contrast', parseInt(e.target.value) || 0)}
                             className="w-16"
                           />
                         </div>
@@ -1002,8 +1030,8 @@ const setAsBackground = () => {
                           />
                           <Input
                             type="number"
-                            value={properties.saturation}
-                            onChange={(e) => updateProperty('saturation', parseInt(e.target.value))}
+                            value={properties.saturation ?? 0}
+                            onChange={(e) => updateProperty('saturation', parseInt(e.target.value) || 0)}
                             className="w-16"
                           />
                         </div>
@@ -1022,8 +1050,8 @@ const setAsBackground = () => {
                           />
                           <Input
                             type="number"
-                            value={properties.blur}
-                            onChange={(e) => updateProperty('blur', parseInt(e.target.value))}
+                            value={properties.blur ?? 0}
+                            onChange={(e) => updateProperty('blur', parseInt(e.target.value) || 0)}
                             className="w-16"
                           />
                         </div>
