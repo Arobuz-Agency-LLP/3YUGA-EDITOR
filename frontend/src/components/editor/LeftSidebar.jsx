@@ -165,16 +165,27 @@ const LeftSidebar = () => {
       text.initDimensions();
     }
     
-    // Apply the effect
-    applyTextEffect(text, effect);
-    
-    // Set as active and render
-    canvas.setActiveObject(text);
+    // Force a render to ensure dimensions are calculated
     canvas.renderAll();
-    updateLayers();
-    saveToHistory();
     
-    toast.success(`${textEffectPresets[effect]?.name || effect} text added!`);
+    // Wait a frame to ensure dimensions are ready, then apply effect
+    setTimeout(() => {
+      // Re-initialize dimensions if needed
+      if (typeof text.initDimensions === 'function') {
+        text.initDimensions();
+      }
+      
+      // Apply the effect
+      applyTextEffect(text, effect);
+      
+      // Set as active and render
+      canvas.setActiveObject(text);
+      canvas.renderAll();
+      updateLayers();
+      saveToHistory();
+      
+      toast.success(`${textEffectPresets[effect]?.name || effect} text added!`);
+    }, 0);
   };
 
   const addCurvedText = (curveType) => {
