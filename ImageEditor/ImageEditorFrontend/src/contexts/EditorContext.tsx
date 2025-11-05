@@ -45,6 +45,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const isInitialized = useRef<boolean>(false);
   const [isDrawingCustom, setIsDrawingCustom] = useState<boolean>(false);
   const [customPath, setCustomPath] = useState<any[]>([]);
+  const [extractedElements, setExtractedElements] = useState<any[]>([]);
   // Initialize history when canvas is first set
   useEffect(() => {
     if (canvas && !isInitialized.current) {
@@ -894,29 +895,85 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
+    // Prevent masking if the image is already a background image
+    if ((activeObject as any).isBackgroundImage) {
+      toast.error('Cannot mask background images. Please select a regular image.');
+      return;
+    }
+
     const objects = canvas.getObjects();
     let shapeToUse: any | null = null;
+    
+    console.log('[Mask] Looking for shape among', objects.length, 'objects');
     
     for (let i = objects.length - 1; i >= 0; i--) {
       const obj: any = objects[i];
       
-      if (obj === activeObject || 
-          obj.id === 'grid-line' || 
-          obj.name === 'customShapePoint' || 
-          obj.name === 'customShapeLine') {
+      // Skip the active object (the image being masked)
+      if (obj === activeObject) {
+        console.log('[Mask] Skipping active object (image to mask)');
         continue;
       }
       
+      // Skip template elements, background images, and helper objects
+      if (obj.isTemplateImage || 
+          obj.isTemplateText || 
+          obj.isBackgroundImage || 
+          obj.id === 'grid-line' || 
+          obj.name === 'customShapePoint' || 
+          obj.name === 'customShapeLine') {
+        console.log('[Mask] Skipping template/background/helper:', obj.type, obj.name);
+        continue;
+      }
+      
+      // Skip template background rectangles (full canvas backgrounds)
+      const objName = (obj.name || '').toLowerCase();
+      const isBackgroundName = objName.includes('background') || 
+                               objName === 'background' ||
+                               objName === 'bg' ||
+                               objName === 'canvas background';
+      
+      // Check if it's a full-canvas background rectangle (covers entire canvas at 0,0)
+      const canvasWidth = canvas.getWidth();
+      const canvasHeight = canvas.getHeight();
+      const objWidth = (obj.width || 0) * (obj.scaleX || 1);
+      const objHeight = (obj.height || 0) * (obj.scaleY || 1);
+      const objLeft = obj.left || 0;
+      const objTop = obj.top || 0;
+      
+      const isFullCanvasBackground = obj.type === 'rect' && 
+                                     objLeft <= 0 && 
+                                     objTop <= 0 && 
+                                     objWidth >= canvasWidth * 0.9 && // Allow small margin
+                                     objHeight >= canvasHeight * 0.9 &&
+                                     (isBackgroundName || !obj.selectable); // Non-selectable or named background
+      
+      if (isFullCanvasBackground) {
+        console.log('[Mask] Skipping full-canvas background rectangle:', objName);
+        continue;
+      }
+      
+      // Only consider actual shape objects, not images or text
       const validTypes = ['path', 'rect', 'circle', 'ellipse', 'triangle', 'polygon'];
       
-      if (validTypes.includes(obj.type || '') || obj.selectable) {
+      // Make sure it's actually a shape, not an image or text that might be selectable
+      // Only consider selectable shapes (user-created shapes are selectable by default)
+      // This helps filter out template background elements that are non-selectable
+      if (validTypes.includes(obj.type || '') && 
+          obj.type !== 'image' && 
+          obj.type !== 'textbox' && 
+          obj.type !== 'text' &&
+          obj.selectable !== false) { // Only selectable shapes (true or undefined), skip explicitly non-selectable
+        console.log('[Mask] Found shape:', obj.type, obj.name, 'at', objLeft, objTop);
         shapeToUse = obj;
         break;
+      } else {
+        console.log('[Mask] Skipping object:', obj.type, 'selectable:', obj.selectable);
       }
     }
 
     if (!shapeToUse) {
-      toast.error('Please create a shape first');
+      toast.error('Please create a selectable shape first. Template background elements cannot be used for masking.');
       return;
     }
 
@@ -953,15 +1010,17 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         } as any);
       }
       
+      // Position clip path at the shape's position (not the image's position)
+      // This ensures the mask is correctly positioned where the shape was
+      const shapeLeft = (shapeToUse as any).left || 0;
+      const shapeTop = (shapeToUse as any).top || 0;
+      const shapeAngle = (shapeToUse as any).angle || 0;
+      
       // Position clip path absolutely so the mask stays fixed while moving the image
-      const imgLeft = (activeObject as any).left || 0;
-      const imgTop = (activeObject as any).top || 0;
-      const imgAngle = (activeObject as any).angle || 0;
-
       (clipShape as any).absolutePositioned = true;
-      (clipShape as any).left = imgLeft;
-      (clipShape as any).top = imgTop;
-      (clipShape as any).angle = imgAngle;
+      (clipShape as any).left = shapeLeft;
+      (clipShape as any).top = shapeTop;
+      (clipShape as any).angle = shapeAngle;
 
       canvas.remove(shapeToUse as any);
       (activeObject as any).clipPath = clipShape;
@@ -1037,93 +1096,51 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    // Prevent filling if the active object is already a background image
+    // Prevent filling if the image is already a background image
     if ((activeObject as any).isBackgroundImage) {
-      toast.error('Cannot fill shapes with background images');
+      toast.error('Cannot use background images to fill shapes. Please select a regular image.');
       return;
     }
-
-    const img = activeObject as any;
+    
     const objects = canvas.getObjects();
     
     // Define valid shape types
     const validShapeTypes = ['rect', 'circle', 'triangle', 'ellipse', 'polygon', 'path', 'text', 'textbox'];
+    const shapes = objects.filter((obj: any) => 
+      validShapeTypes.includes(obj.type || '') && 
+      obj !== activeObject && 
+      obj.type !== 'image' &&
+      obj.id !== 'grid-line' &&
+      obj.name !== 'customShapePoint' &&
+      obj.name !== 'customShapeLine'
+    );
     
-    // First, collect all potential shapes (excluding template elements and backgrounds)
-    const potentialShapes: any[] = [];
-    
-    for (const obj of objects) {
-      const objAny = obj as any;
-      
-      // Skip the active image
-      if (objAny === img) continue;
-      
-      // Skip helper objects
-      if (objAny.id === 'grid-line' || 
-          objAny.name === 'customShapePoint' || 
-          objAny.name === 'customShapeLine') continue;
-      
-      // Skip if not a valid shape type
-      if (!validShapeTypes.includes(objAny.type)) continue;
-      
-      // Skip template elements
-      if (objAny.isTemplateImage || objAny.isTemplateText) continue;
-      
-      // Skip background images
-      if (objAny.isBackgroundImage) continue;
-      
-      // Skip other images
-      if (objAny.type === 'image') continue;
-      
-      // For rectangles: check if it's a template background
-      if (objAny.type === 'rect') {
-        const canvasWidth = canvas.width || 1080;
-        const canvasHeight = canvas.height || 1080;
-        const objWidth = (objAny.width || 0) * (objAny.scaleX || 1);
-        const objHeight = (objAny.height || 0) * (objAny.scaleY || 1);
-        const objLeft = objAny.left || 0;
-        const objTop = objAny.top || 0;
-        const objName = (objAny.name || '').toLowerCase();
-        
-        // Skip if it's clearly a background rectangle
-        const isBackground = (
-          (objLeft === 0 && objTop === 0 && 
-           (objWidth >= canvasWidth * 0.85 || objHeight >= canvasHeight * 0.85)) ||
-          objName.includes('background') ||
-          objName.includes('bg')
-        );
-        
-        if (isBackground) continue;
-      }
-      
-      // This is a valid shape!
-      potentialShapes.push(objAny);
-    }
-    
-    if (potentialShapes.length === 0) {
-      toast.error('Please add a shape first. Template elements are excluded.');
+    if (shapes.length === 0) {
+      toast.error('Please add a shape to the canvas to fill it');
       return;
     }
+    
+    console.log('[Fill Shape] Found', shapes.length, 'valid shapes to fill');
     
     // Find the best shape to fill
     let shapeToFill: any | null = null;
     
-    if (potentialShapes.length === 1) {
-      shapeToFill = potentialShapes[0];
+    if (shapes.length === 1) {
+      shapeToFill = shapes[0];
     } else {
       // Prioritize: selectable shapes first, then closest to image
-      potentialShapes.sort((a, b) => {
+      shapes.sort((a, b) => {
         const aSelectable = a.selectable !== false ? 1 : 0;
         const bSelectable = b.selectable !== false ? 1 : 0;
         if (aSelectable !== bSelectable) return bSelectable - aSelectable;
         return 0; // Keep original order if same selectability
       });
       
-      const imageBounds = img.getBoundingRect();
+      const imageBounds = activeObject.getBoundingRect();
       let maxOverlap = 0;
       let closestDistance = Infinity;
       
-      for (const shape of potentialShapes) {
+      for (const shape of shapes) {
         const shapeBounds = shape.getBoundingRect();
         
         const overlapLeft = Math.max(imageBounds.left, shapeBounds.left);
@@ -1153,7 +1170,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     
     try {
-      const imgElement = img.getElement();
+      const imgElement = activeObject.getElement();
       if (!imgElement) {
         toast.error('Could not access image element');
         return;
@@ -1191,18 +1208,24 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         repeat: 'no-repeat'
       });
       
-      shapeToFill.set('fill', pattern);
-      canvas.remove(img);
-      canvas.setActiveObject(shapeToFill);
+      (shapeToFill as any).set('fill', pattern);
+      canvas.remove(activeObject as any);
+      canvas.setActiveObject(shapeToFill as any);
       
+      // Force canvas to re-render with the pattern
       canvas.renderAll();
+      
+      // Verify the pattern was set
+      const shapeFill = (shapeToFill as any).fill;
+      console.log('[Fill Shape] Shape fill after setting pattern:', shapeFill ? 'Pattern set' : 'Pattern NOT set');
+      
       updateLayers();
       saveToHistory();
       toast.success('Shape filled with image!');
       
     } catch (error) {
-      console.error('[Fill Shape] Error:', error);
-      toast.error('Failed to fill shape with image: ' + (error.message || 'Unknown error'));
+      console.error('Fill shape error:', error);
+      toast.error('Failed to fill shape with image');
     }
   }, [canvas, activeObject, updateLayers, saveToHistory]);
 
@@ -1331,6 +1354,120 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [canvas, saveToHistory]);
 
+  const makeImageEditable = useCallback(async () => {
+    if (!canvas || !activeObject || activeObject.type !== 'image') {
+      toast.error('Please select an image first');
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      // Get the image element and create a canvas to extract image data
+      const imgElement = activeObject.getElement();
+      const tempCanvas = document.createElement('canvas');
+      const ctx = tempCanvas.getContext('2d');
+      if (!ctx || !imgElement) {
+        throw new Error('Failed to create canvas context or get image element');
+      }
+      
+      // Get actual image dimensions (accounting for scale)
+      const imgWidth = activeObject.width || imgElement.width;
+      const imgHeight = activeObject.height || imgElement.height;
+      const scaleX = activeObject.scaleX || 1;
+      const scaleY = activeObject.scaleY || 1;
+      const actualWidth = imgWidth * scaleX;
+      const actualHeight = imgHeight * scaleY;
+      
+      tempCanvas.width = actualWidth;
+      tempCanvas.height = actualHeight;
+      
+      // Draw the image at full size
+      ctx.drawImage(imgElement, 0, 0, actualWidth, actualHeight);
+      
+      const dataURL = tempCanvas.toDataURL('image/png', 1.0);
+      
+      // Convert dataURL to blob
+      const dataURLToBlob = (dataURL: string): Blob => {
+        const arr = dataURL.split(',');
+        const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/png';
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new Blob([u8arr], { type: mime });
+      };
+      
+      const blob = dataURLToBlob(dataURL);
+      
+      // Create FormData and append the image
+      const formData = new FormData();
+      formData.append('image', blob, 'image.png');
+      
+      // Import API config
+      const { API_ENDPOINTS } = await import('../config/apiConfig');
+      
+      // Send to backend API for text detection
+      const apiResponse = await fetch(API_ENDPOINTS.MAKE_EDITABLE, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!apiResponse.ok) {
+        throw new Error(`API error: ${apiResponse.status} ${apiResponse.statusText}`);
+      }
+
+      const result = await apiResponse.json();
+      
+      if (result.success && result.text_objects && result.text_objects.length > 0) {
+        // Store extracted elements
+        setExtractedElements(result.text_objects);
+        
+        // Add text objects to canvas
+        result.text_objects.forEach((textObj: any, index: number) => {
+          const fabricText = new fabric.Textbox(textObj.text, {
+            left: (activeObject.left || 0) + textObj.left,
+            top: (activeObject.top || 0) + textObj.top,
+            width: textObj.width,
+            height: textObj.height,
+            fontSize: textObj.fontSize || 16,
+            fontFamily: textObj.fontFamily || 'Arial',
+            fill: textObj.fill || '#000000',
+            backgroundColor: 'rgba(255, 255, 0, 0.3)', // Highlight background
+            selectable: true,
+            evented: true,
+            name: `extracted-text-${index}`
+          });
+          
+          canvas.add(fabricText);
+        });
+        
+        canvas.renderAll();
+        updateLayers();
+        saveToHistory();
+        
+        toast.success(`Extracted ${result.text_objects.length} text elements!`);
+      } else {
+        toast.info('No text found in the image');
+      }
+      
+    } catch (error: any) {
+      console.error('Text extraction failed:', error);
+      
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+        toast.error('Cannot connect to the backend API. Please ensure the Flask server is running');
+      } else if (error.message?.includes('API error')) {
+        toast.error(`Backend API error: ${error.message}`);
+      } else {
+        toast.error('Failed to extract text. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [canvas, activeObject, updateLayers, saveToHistory]);
+
   // Add keyboard shortcuts for undo/redo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1432,7 +1569,10 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setBackgroundOpacity,
     applyTemplateContrast,
     applyBackgroundOpacity,
-    removeBackground
+    removeBackground,
+    extractedElements,
+    setExtractedElements,
+    makeImageEditable
   };
 
   return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;

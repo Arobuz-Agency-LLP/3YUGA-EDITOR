@@ -266,6 +266,40 @@ export const updateOCRTextProperty = (activeObject, property, value, canvas, sav
 };
 
 export const processImageForEditing = async (imageObject, canvas, updateLayers, saveToHistory) => {
+  try {
+    if (!imageObject || imageObject.isBackgroundImage) return;
+
+    // Export the image to a blob
+    const imgElement = imageObject.getElement();
+    if (!imgElement) {
+      toast.error('Could not get image element');
+      return;
+    }
+
+    // Create a temporary canvas to export the image
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = imgElement.width || imageObject.width;
+    tempCanvas.height = imgElement.height || imageObject.height;
+    const ctx = tempCanvas.getContext('2d');
+    
+    if (!ctx) {
+      toast.error('Could not create canvas context');
+      return;
+    }
+
+    ctx.drawImage(imgElement, 0, 0);
+    
+    // Convert to blob
+    const blob = await new Promise((resolve) => {
+      tempCanvas.toBlob((blob) => resolve(blob), 'image/png');
+    });
+
+    if (!blob) {
+      toast.error('Could not export image');
+      return;
+    }
+
+export const processImageForEditing = async (imageObject, canvas, updateLayers, saveToHistory) => {
   if (!imageObject || !canvas || imageObject.type !== 'image') {
     throw new Error('Please select a valid image');
   }
@@ -474,6 +508,134 @@ export const integrateTextToImage = async (imageObject, canvas, textEdits, updat
     }, 'image/png');
 
   } catch (error) {
+    console.error('Image processing error:', error);
+    toast.error('Failed to process image', {
+      description: error.message
+    });
+  }
+};
+
+export const integrateTextToImage = async (imageObject, canvas, updateLayers, saveToHistory) => {
+  if (!imageObject || !canvas || imageObject.type !== 'image') {
+    throw new Error('Invalid image object');
+  }
+
+  try {
+    // Get all OCR text objects on the canvas
+    const textObjects = canvas.getObjects().filter(obj => obj.isOCRText && obj.ocrData);
+    
+    if (textObjects.length === 0) {
+      toast.warning('No text overlays found to integrate');
+      return;
+    }
+
+    // Prepare text edits from canvas textboxes
+    const textEdits = textObjects.map((textObj) => {
+      const ocrData = textObj.ocrData || {};
+      return {
+        text: textObj.text || ocrData.text || '',
+        bbox: {
+          x: ocrData.bbox?.x || 0,
+          y: ocrData.bbox?.y || 0,
+          width: ocrData.bbox?.width || 0,
+          height: ocrData.bbox?.height || 0
+        }
+      };
+    });
+
+    // Export the base image to a blob
+    const imgElement = imageObject.getElement();
+    if (!imgElement) {
+      throw new Error('Could not get image element');
+    }
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = imgElement.width || imageObject.width;
+    tempCanvas.height = imgElement.height || imageObject.height;
+    const ctx = tempCanvas.getContext('2d');
+    
+    if (!ctx) {
+      throw new Error('Could not create canvas context');
+    }
+
+    ctx.drawImage(imgElement, 0, 0);
+    
+    const blob = await new Promise((resolve) => {
+      tempCanvas.toBlob((blob) => resolve(blob), 'image/png');
+    });
+
+    if (!blob) {
+      throw new Error('Could not export image');
+    }
+
+    // Send to backend
+    const formData = new FormData();
+    formData.append('image', blob);
+    formData.append('text_edits', JSON.stringify(textEdits));
+
+    const response = await fetch(`${BACKEND_URL}/integrate-text`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to integrate text');
+    }
+
+    const data = await response.json();
+    
+    if (!data.integratedImage) {
+      throw new Error('No integrated image returned');
+    }
+    
+    // Load the integrated image
+    const integratedImg = await fabric.FabricImage.fromURL(data.integratedImage, { 
+      crossOrigin: 'anonymous' 
+    });
+    
+    // Preserve image properties
+    integratedImg.set({
+      left: imageObject.left,
+      top: imageObject.top,
+      scaleX: imageObject.scaleX,
+      scaleY: imageObject.scaleY,
+      angle: imageObject.angle,
+      opacity: imageObject.opacity,
+      name: imageObject.name || 'integrated-image',
+      // Preserve OCR payload
+      _ocrPayload: imageObject._ocrPayload,
+      _ocrProcessed: imageObject._ocrProcessed
+    });
+    
+    // Remove old image
+    canvas.remove(imageObject);
+    
+    // Remove all OCR text overlays for this image
+    const objects = canvas.getObjects();
+    objects.forEach((obj) => {
+      if (obj.isOCRText) {
+        canvas.remove(obj);
+      }
+    });
+    
+    // Add integrated image
+    canvas.add(integratedImg);
+    canvas.setActiveObject(integratedImg);
+    canvas.renderAll();
+    
+    updateLayers();
+    saveToHistory();
+    
+    toast.success(`Successfully integrated ${textEdits.length} text element(s)`);
+    
+    return integratedImg;
+  } catch (error) {
+    console.error('Text integration error:', error);
+    toast.error('Failed to integrate text', {
+      description: error.message
+    });
+    throw error;
     console.error('Text integration error:', error);
     toast.dismiss();
     toast.error('Failed to integrate text', {

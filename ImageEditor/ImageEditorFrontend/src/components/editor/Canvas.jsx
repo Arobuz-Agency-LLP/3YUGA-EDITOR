@@ -847,152 +847,100 @@ const Canvas = () => {
       case 'setBackground':
         if (activeObject && activeObject.type === 'image' && canvas) {
             try {
-              console.log('[Set Background] Starting (context menu)');
-              console.log('[Set Background] Active object:', {
-                type: activeObject.type,
-                isTemplateImage: activeObject.isTemplateImage,
-                isBackgroundImage: activeObject.isBackgroundImage,
-                visible: activeObject.visible
-              });
+              console.log('[Set Background] Starting (context menu), activeObject:', activeObject);
               
-              const img = activeObject;
-              
-              // Get image element and dimensions
-              const imgElement = img.getElement();
-              if (!imgElement) {
-                console.error('[Set Background] No image element found');
-                toast.error('Could not access image element');
-                return;
-              }
-              
-              // Get original image dimensions
-              const originalWidth = imgElement.naturalWidth || imgElement.width || img.width;
-              const originalHeight = imgElement.naturalHeight || imgElement.height || img.height;
-              
-              console.log('[Set Background] Original dimensions:', originalWidth, originalHeight);
-              
-              if (originalWidth === 0 || originalHeight === 0) {
-                console.error('[Set Background] Invalid dimensions');
-                toast.error('Invalid image dimensions');
-                return;
-              }
-              
-              // Get canvas dimensions
-              const canvasWidth = canvas.width || 1080;
-              const canvasHeight = canvas.height || 1080;
-              const zoom = canvas.getZoom() || 1;
-              const actualCanvasWidth = canvasWidth / zoom;
-              const actualCanvasHeight = canvasHeight / zoom;
-              
-              // Calculate scale to cover canvas
-              const scaleX = actualCanvasWidth / originalWidth;
-              const scaleY = actualCanvasHeight / originalHeight;
-              const scale = Math.max(scaleX, scaleY);
-              
-              console.log('[Set Background] Calculated scale:', scale, 'canvas:', actualCanvasWidth, 'x', actualCanvasHeight);
-              
-              // Remove existing background if any (but NOT the active object we're converting)
-              const existingBg = canvas.getObjects().find(obj => obj.isBackgroundImage && obj !== img);
-              if (existingBg) {
-                console.log('[Set Background] Removing existing background');
-                canvas.remove(existingBg);
-              }
-              
-              // Get all objects before modifying
-              const allObjects = canvas.getObjects();
-              const templateCount = allObjects.filter(obj => obj.isTemplateImage || obj.isTemplateText).length;
-              console.log('[Set Background] Template elements found:', templateCount);
-              
-              // First, ensure the image is on the canvas
-              if (!canvas.getObjects().includes(img)) {
-                console.log('[Set Background] Image not on canvas, adding it');
-                canvas.add(img);
-              }
-              
-              // Modify the existing image in place
-              // Remove template image flag if present, as it's now a background
-              img.set({
-                left: 0,
-                top: 0,
-                scaleX: scale,
-                scaleY: scale,
-                selectable: false,
-                evented: false,
-                isBackgroundImage: true,
-                isTemplateImage: false, // Remove template flag when setting as background
-                objectCaching: false,
-                visible: true,
-                opacity: 1,
-                originX: 'left',
-                originY: 'top'
-              });
-              
-              // Update coordinates
-              img.setCoords();
-              
-              // Render immediately to see changes
-              canvas.renderAll();
-              
-              // Ensure background is at index 0 - send to back many times to handle all template elements
-              const totalObjects = canvas.getObjects().length;
-              console.log('[Set Background] Total objects:', totalObjects);
-              
-              // Send to back enough times to ensure it's behind everything
-              for (let i = 0; i < totalObjects * 2; i++) {
-                canvas.sendObjectToBack(img);
-              }
-              
-              // Verify final position
-              const finalIndex = canvas.getObjects().indexOf(img);
-              console.log('[Set Background] Final index:', finalIndex);
-              
-              // Force render again after moving to back
-              canvas.renderAll();
-              
-              // Final verification
-              const finalObjects = canvas.getObjects();
-              const finalPosition = finalObjects.indexOf(img);
-              
-              console.log('[Set Background] Final position:', {
-                index: finalPosition,
-                totalObjects: finalObjects.length,
-                isBackgroundImage: img.isBackgroundImage,
-                visible: img.visible,
-                opacity: img.opacity,
-                left: img.left,
-                top: img.top,
-                scaleX: img.scaleX,
-                scaleY: img.scaleY,
-                width: img.width * img.scaleX,
-                height: img.height * img.scaleY
-              });
-              
-              // Force render multiple times to ensure visibility
-              canvas.discardActiveObject();
-              canvas.renderAll();
-              canvas.requestRenderAll();
-              updateLayers();
-              saveToHistory();
-              
-              // Small delay then render again to ensure template elements don't override
-              setTimeout(() => {
-                // Verify the image is still there and visible
-                const bgImg = canvas.getObjects().find(obj => obj === img && obj.isBackgroundImage);
-                if (bgImg) {
-                  console.log('[Set Background] Background image verified:', {
-                    visible: bgImg.visible,
-                    opacity: bgImg.opacity,
-                    index: canvas.getObjects().indexOf(bgImg)
-                  });
-                  canvas.renderAll();
-                  updateLayers();
-                  toast.success('Image set as background successfully!');
-                } else {
-                  console.error('[Set Background] Background image not found after setting!');
-                  toast.error('Background image was not set correctly');
+              // Clone the existing image object instead of creating new from URL
+              activeObject.clone((clonedImg) => {
+                if (!clonedImg) {
+                  toast.error('Failed to clone image');
+                  return;
                 }
-              }, 100);
-              
+                
+                console.log('[Set Background] Cloned image, dimensions:', clonedImg.width, clonedImg.height);
+                
+                const canvasWidth = canvas.width || 1080;
+                const canvasHeight = canvas.height || 1080;
+                
+                const actualCanvasWidth = canvasWidth / (canvas.getZoom() || 1);
+                const actualCanvasHeight = canvasHeight / (canvas.getZoom() || 1);
+                
+                // Get original image dimensions (not scaled)
+                const imgElement = activeObject.getElement();
+                const originalWidth = imgElement ? imgElement.naturalWidth || imgElement.width || activeObject.width : activeObject.width;
+                const originalHeight = imgElement ? imgElement.naturalHeight || imgElement.height || activeObject.height : activeObject.height;
+                
+                console.log('[Set Background] Original dimensions:', originalWidth, originalHeight);
+                
+                if (originalWidth === 0 || originalHeight === 0) {
+                  toast.error('Invalid image dimensions');
+                  return;
+                }
+                
+                // Calculate scale to cover canvas
+                const scaleX = actualCanvasWidth / originalWidth;
+                const scaleY = actualCanvasHeight / originalHeight;
+                const scale = Math.max(scaleX, scaleY);
+                
+                // Position at 0,0 to cover from top-left
+                const left = 0;
+                const top = 0;
+                
+                console.log('[Set Background] Setting properties:', { left, top, scale, originalWidth, originalHeight });
+                
+                // Remove existing background if any (but NOT the active object we're converting)
+                const existingBg = canvas.getObjects().find(obj => obj.isBackgroundImage && obj !== activeObject);
+                if (existingBg) {
+                  console.log('[Set Background] Removing existing background');
+                  canvas.remove(existingBg);
+                }
+                
+                // Set properties for background
+                clonedImg.set({
+                  left: left,
+                  top: top,
+                  scaleX: scale,
+                  scaleY: scale,
+                  selectable: false,
+                  evented: false,
+                  isBackgroundImage: true,
+                  objectCaching: false,
+                  visible: true,
+                  opacity: 1,
+                  originX: 'left',
+                  originY: 'top'
+                });
+                
+                // Update coordinates
+                clonedImg.setCoords();
+                
+                // Remove the original active object first
+                console.log('[Set Background] Removing original image');
+                canvas.remove(activeObject);
+                
+                // Add the cloned background image
+                console.log('[Set Background] Adding cloned background image');
+                canvas.add(clonedImg);
+                
+                // Send it to the very back
+                canvas.sendObjectToBack(clonedImg);
+                
+                // Verify it was added
+                const verifyAdded = canvas.getObjects().includes(clonedImg);
+                const imgIndex = canvas.getObjects().indexOf(clonedImg);
+                console.log('[Set Background] Image added:', verifyAdded, 'index:', imgIndex, 'visible:', clonedImg.visible, 'opacity:', clonedImg.opacity, 'left:', clonedImg.left, 'top:', clonedImg.top, 'scaleX:', clonedImg.scaleX, 'scaleY:', clonedImg.scaleY);
+                
+                if (!verifyAdded) {
+                  toast.error('Failed to add background image');
+                  return;
+                }
+                
+                // Force render
+                canvas.discardActiveObject();
+                canvas.renderAll();
+                updateLayers();
+                saveToHistory();
+                toast.success('Image set as background successfully!');
+              });
             } catch (error) {
               console.error('[Set Background] Error:', error);
               toast.error('Failed to set image as background: ' + (error.message || 'Unknown error'));
