@@ -157,35 +157,13 @@ const LeftSidebar = () => {
       splitByGrapheme: true,
     });
 
-    // Add text to canvas first so dimensions can be calculated
+    applyTextEffect(text, effect);
+
     canvas.add(text);
-    
-    // Initialize dimensions before applying effect (needed for gradients)
-    if (typeof text.initDimensions === 'function') {
-      text.initDimensions();
-    }
-    
-    // Force a render to ensure dimensions are calculated
+    canvas.setActiveObject(text);
     canvas.renderAll();
-    
-    // Wait a frame to ensure dimensions are ready, then apply effect
-    setTimeout(() => {
-      // Re-initialize dimensions if needed
-      if (typeof text.initDimensions === 'function') {
-        text.initDimensions();
-      }
-      
-      // Apply the effect
-      applyTextEffect(text, effect);
-      
-      // Set as active and render
-      canvas.setActiveObject(text);
-      canvas.renderAll();
-      updateLayers();
-      saveToHistory();
-      
-      toast.success(`${textEffectPresets[effect]?.name || effect} text added!`);
-    }, 0);
+    updateLayers();
+    saveToHistory();
   };
 
   const addCurvedText = (curveType) => {

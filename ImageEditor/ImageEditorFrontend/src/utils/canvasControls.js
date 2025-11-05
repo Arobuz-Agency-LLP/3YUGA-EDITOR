@@ -265,154 +265,220 @@ export const updateOCRTextProperty = (activeObject, property, value, canvas, sav
   }
 };
 
-// Helper function to convert dataURL to Blob
-function dataURLToBlob(dataURL) {
-  const arr = dataURL.split(',');
-  const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/png';
-  const bstr = atob(arr[1]);
-  let n = bstr.length;
-  const u8arr = new Uint8Array(n);
-  while (n--) {
-    u8arr[n] = bstr.charCodeAt(n);
-  }
-  return new Blob([u8arr], { type: mime });
-}
-
-// Helper function to export a Fabric image object to blob
-function exportImageObjectToBlob(imageObject) {
-  return new Promise((resolve, reject) => {
-    try {
-      // Get the image element
-      const imgElement = imageObject.getElement();
-      if (!imgElement) {
-        reject(new Error('Image element not found'));
-        return;
-      }
-
-      // Create a temporary canvas to export the image
-      const tempCanvas = document.createElement('canvas');
-      const ctx = tempCanvas.getContext('2d');
-      
-      // Set canvas size to match image dimensions (account for scale)
-      const actualWidth = (imageObject.width || imgElement.width || 0) * (imageObject.scaleX || 1);
-      const actualHeight = (imageObject.height || imgElement.height || 0) * (imageObject.scaleY || 1);
-      
-      if (actualWidth === 0 || actualHeight === 0) {
-        // Fallback: use natural dimensions
-        tempCanvas.width = imgElement.naturalWidth || imgElement.width || 800;
-        tempCanvas.height = imgElement.naturalHeight || imgElement.height || 600;
-      } else {
-        tempCanvas.width = actualWidth;
-        tempCanvas.height = actualHeight;
-      }
-
-      // Draw image on canvas
-      ctx.drawImage(imgElement, 0, 0, tempCanvas.width, tempCanvas.height);
-      
-      // Convert to blob
-      tempCanvas.toBlob((blob) => {
-        if (blob) {
-          resolve(blob);
-        } else {
-          reject(new Error('Failed to convert canvas to blob'));
-        }
-      }, 'image/png');
-    } catch (error) {
-      reject(error);
-    }
-  });
-}
-
 export const processImageForEditing = async (imageObject, canvas, updateLayers, saveToHistory) => {
-  if (!imageObject || imageObject.type !== 'image' || !canvas) {
-    toast.error('Please select an image to process');
-    return;
+  if (!imageObject || !canvas || imageObject.type !== 'image') {
+    throw new Error('Please select a valid image');
   }
 
-  // Check if already processed
+  // Prevent processing if the image is already a background image
   if (imageObject.isBackgroundImage) {
     toast.error('Cannot process background images');
     return;
   }
 
   try {
-    // Store original image properties
-    const originalLeft = imageObject.left;
-    const originalTop = imageObject.top;
-    const originalScaleX = imageObject.scaleX || 1;
-    const originalScaleY = imageObject.scaleY || 1;
-    const originalAngle = imageObject.angle || 0;
-    const originalOpacity = imageObject.opacity || 1;
-    const originalName = imageObject.name;
+    toast.loading('Processing image for editing...');
 
-    // Export image to blob
-    const blob = await exportImageObjectToBlob(imageObject);
-    
-    // Create FormData and send to backend
-    const formData = new FormData();
-    formData.append('image', blob, 'image.png');
-    formData.append('text_clean_method', 'fill'); // or 'blur'
-
-    const response = await fetch(`${BACKEND_URL}/make-editable`, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to process image');
+    // Get image element and convert to blob
+    const imgElement = imageObject.getElement();
+    if (!imgElement) {
+      throw new Error('Could not access image element');
     }
 
-    const data = await response.json();
-    console.log('OCR Response:', data);
-
-    // Load cleaned base image
-    const cleanedImg = await fabric.FabricImage.fromURL(data.baseImage, { 
-      crossOrigin: 'anonymous' 
-    });
+    // Convert image to blob for upload
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = imgElement.naturalWidth || imgElement.width;
+    tempCanvas.height = imgElement.naturalHeight || imgElement.height;
+    const ctx = tempCanvas.getContext('2d');
+    ctx.drawImage(imgElement, 0, 0);
     
-    // Match the current image position and scale
-    cleanedImg.set({
-      left: originalLeft,
-      top: originalTop,
-      scaleX: originalScaleX,
-      scaleY: originalScaleY,
-      angle: originalAngle,
-      opacity: originalOpacity,
-      name: originalName,
-      // Store OCR payload for later use
-      _ocrPayload: {
-        baseImage: data.baseImage,
-        text: data.text,
-        objects: data.objects,
-        imageSize: data.imageSize,
-        _raw: data
-      },
-      _ocrProcessed: true
-    });
+    tempCanvas.toBlob(async (blob) => {
+      if (!blob) {
+        throw new Error('Failed to convert image to blob');
+      }
 
-    // Replace the old image with cleaned one
-    canvas.remove(imageObject);
-    canvas.add(cleanedImg);
-    canvas.setActiveObject(cleanedImg);
-    
-    // Update reference to the cleaned image
-    const updatedImageObject = cleanedImg;
+      // Create FormData
+      const formData = new FormData();
+      formData.append('image', blob, 'image.png');
+      formData.append('text_clean_method', 'fill');
 
-    // Add editable text overlays on top of cleaned image
-    if (data.text && data.text.words && data.text.words.length) {
-      createTextOverlays(data.text.words, updatedImageObject, canvas);
-    }
-    if (data.objects && data.objects.length) {
-      createObjectOverlays(data.objects, updatedImageObject, canvas);
-    }
+      // Send to backend
+      const response = await fetch(`${BACKEND_URL}/make-editable`, {
+        method: 'POST',
+        body: formData,
+      });
 
-    canvas.renderAll();
-    updateLayers();
-    saveToHistory();
-    
-    toast.success(`Image processed! Found ${data.text?.words?.length || 0} text regions`);
+      if (!response.ok) {
+        throw new Error('Failed to process image');
+      }
+
+      const data = await response.json();
+      
+      // Store OCR payload in image object
+      imageObject._ocrPayload = data;
+
+      // Replace the original image with the cleaned base image
+      if (data.baseImage) {
+        const img = await fabric.FabricImage.fromURL(data.baseImage, { crossOrigin: 'anonymous' });
+        
+        // Preserve original position and scale
+        const originalLeft = imageObject.left || 0;
+        const originalTop = imageObject.top || 0;
+        const originalScaleX = imageObject.scaleX || 1;
+        const originalScaleY = imageObject.scaleY || 1;
+        const originalAngle = imageObject.angle || 0;
+        
+        // Calculate scale to match original image size
+        const scaleX = (imageObject.width * originalScaleX) / img.width;
+        const scaleY = (imageObject.height * originalScaleY) / img.height;
+        
+        img.set({
+          left: originalLeft,
+          top: originalTop,
+          scaleX: scaleX,
+          scaleY: scaleY,
+          angle: originalAngle,
+          selectable: imageObject.selectable !== false,
+          evented: imageObject.evented !== false,
+          originX: imageObject.originX || 'left',
+          originY: imageObject.originY || 'top'
+        });
+
+        // Remove original image
+        canvas.remove(imageObject);
+        
+        // Add cleaned image
+        canvas.add(img);
+        canvas.setActiveObject(img);
+      }
+
+      // Get the cleaned image (it was just added above)
+      const cleanedImage = canvas.getActiveObject();
+      
+      // Create text overlays from OCR results (use cleaned image for positioning)
+      if (data.text && data.text.words && cleanedImage) {
+        createTextOverlays(data.text.words, cleanedImage, canvas);
+      }
+
+      // Create object overlays if any (use cleaned image for positioning)
+      if (data.objects && cleanedImage) {
+        createObjectOverlays(data.objects, cleanedImage, canvas);
+      }
+
+      canvas.renderAll();
+      updateLayers();
+      saveToHistory();
+
+      toast.dismiss();
+      toast.success(`Image processed! Found ${data.text?.words?.length || 0} text regions`);
+    }, 'image/png');
+
   } catch (error) {
-    console.error('Error processing image for editing:', error);
-    toast.error('Failed to process image: ' + (error.message || 'Unknown error'));
+    console.error('Image processing error:', error);
+    toast.dismiss();
+    toast.error('Failed to process image', {
+      description: error.message
+    });
+    throw error;
+  }
+};
+
+export const integrateTextToImage = async (imageObject, canvas, textEdits, updateLayers, saveToHistory) => {
+  if (!imageObject || !canvas || imageObject.type !== 'image') {
+    throw new Error('Please select a valid image');
+  }
+
+  try {
+    toast.loading('Integrating text edits...');
+
+    // Get image element and convert to blob
+    const imgElement = imageObject.getElement();
+    if (!imgElement) {
+      throw new Error('Could not access image element');
+    }
+
+    // Convert image to blob for upload
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = imgElement.naturalWidth || imgElement.width;
+    tempCanvas.height = imgElement.naturalHeight || imgElement.height;
+    const ctx = tempCanvas.getContext('2d');
+    ctx.drawImage(imgElement, 0, 0);
+    
+    tempCanvas.toBlob(async (blob) => {
+      if (!blob) {
+        throw new Error('Failed to convert image to blob');
+      }
+
+      // Create FormData
+      const formData = new FormData();
+      formData.append('image', blob, 'image.png');
+      formData.append('textEdits', JSON.stringify(textEdits));
+
+      // Send to backend
+      const response = await fetch(`${BACKEND_URL}/integrate-text`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to integrate text');
+      }
+
+      const data = await response.json();
+      
+      // Replace the image with the integrated version
+      if (data.integratedImage) {
+        const img = await fabric.FabricImage.fromURL(data.integratedImage, { crossOrigin: 'anonymous' });
+        
+        // Preserve original position and scale
+        const originalLeft = imageObject.left || 0;
+        const originalTop = imageObject.top || 0;
+        const originalScaleX = imageObject.scaleX || 1;
+        const originalScaleY = imageObject.scaleY || 1;
+        const originalAngle = imageObject.angle || 0;
+        
+        // Calculate scale to match original image size
+        const scaleX = (imageObject.width * originalScaleX) / img.width;
+        const scaleY = (imageObject.height * originalScaleY) / img.height;
+        
+        img.set({
+          left: originalLeft,
+          top: originalTop,
+          scaleX: scaleX,
+          scaleY: scaleY,
+          angle: originalAngle,
+          selectable: imageObject.selectable !== false,
+          evented: imageObject.evented !== false,
+          originX: imageObject.originX || 'left',
+          originY: imageObject.originY || 'top'
+        });
+
+        // Remove original image and OCR text overlays
+        canvas.getObjects().forEach(obj => {
+          if (obj.isOCRText || obj === imageObject) {
+            canvas.remove(obj);
+          }
+        });
+        
+        // Add integrated image
+        canvas.add(img);
+        canvas.setActiveObject(img);
+      }
+
+      canvas.renderAll();
+      updateLayers();
+      saveToHistory();
+
+      toast.dismiss();
+      toast.success('Text integrated successfully!');
+    }, 'image/png');
+
+  } catch (error) {
+    console.error('Text integration error:', error);
+    toast.dismiss();
+    toast.error('Failed to integrate text', {
+      description: error.message
+    });
+    throw error;
   }
 };

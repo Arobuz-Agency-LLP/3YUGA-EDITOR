@@ -1036,34 +1036,95 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       toast.error('Please select an image first');
       return;
     }
-    
+
+    // Prevent filling if the active object is already a background image
+    if ((activeObject as any).isBackgroundImage) {
+      toast.error('Cannot fill shapes with background images');
+      return;
+    }
+
+    const img = activeObject as any;
     const objects = canvas.getObjects();
-    const validShapeTypes = ['rect', 'circle', 'triangle', 'ellipse', 'polygon', 'path', 'text', 'textbox'];
-    const shapes = objects.filter((obj: any) => 
-      validShapeTypes.includes(obj.type || '') && 
-      obj !== activeObject && 
-      obj.type !== 'image' &&
-      obj.id !== 'grid-line' &&
-      obj.name !== 'customShapePoint' &&
-      obj.name !== 'customShapeLine'
-    );
     
-    if (shapes.length === 0) {
-      toast.error('Please add a shape to the canvas to fill it');
+    // Define valid shape types
+    const validShapeTypes = ['rect', 'circle', 'triangle', 'ellipse', 'polygon', 'path', 'text', 'textbox'];
+    
+    // First, collect all potential shapes (excluding template elements and backgrounds)
+    const potentialShapes: any[] = [];
+    
+    for (const obj of objects) {
+      const objAny = obj as any;
+      
+      // Skip the active image
+      if (objAny === img) continue;
+      
+      // Skip helper objects
+      if (objAny.id === 'grid-line' || 
+          objAny.name === 'customShapePoint' || 
+          objAny.name === 'customShapeLine') continue;
+      
+      // Skip if not a valid shape type
+      if (!validShapeTypes.includes(objAny.type)) continue;
+      
+      // Skip template elements
+      if (objAny.isTemplateImage || objAny.isTemplateText) continue;
+      
+      // Skip background images
+      if (objAny.isBackgroundImage) continue;
+      
+      // Skip other images
+      if (objAny.type === 'image') continue;
+      
+      // For rectangles: check if it's a template background
+      if (objAny.type === 'rect') {
+        const canvasWidth = canvas.width || 1080;
+        const canvasHeight = canvas.height || 1080;
+        const objWidth = (objAny.width || 0) * (objAny.scaleX || 1);
+        const objHeight = (objAny.height || 0) * (objAny.scaleY || 1);
+        const objLeft = objAny.left || 0;
+        const objTop = objAny.top || 0;
+        const objName = (objAny.name || '').toLowerCase();
+        
+        // Skip if it's clearly a background rectangle
+        const isBackground = (
+          (objLeft === 0 && objTop === 0 && 
+           (objWidth >= canvasWidth * 0.85 || objHeight >= canvasHeight * 0.85)) ||
+          objName.includes('background') ||
+          objName.includes('bg')
+        );
+        
+        if (isBackground) continue;
+      }
+      
+      // This is a valid shape!
+      potentialShapes.push(objAny);
+    }
+    
+    if (potentialShapes.length === 0) {
+      toast.error('Please add a shape first. Template elements are excluded.');
       return;
     }
     
+    // Find the best shape to fill
     let shapeToFill: any | null = null;
     
-    if (shapes.length === 1) {
-      shapeToFill = shapes[0];
+    if (potentialShapes.length === 1) {
+      shapeToFill = potentialShapes[0];
     } else {
-      const imageBounds = (activeObject as any).getBoundingRect();
-      let maxOverlap = 0;
-      let closestDistance = Infinity as number;
+      // Prioritize: selectable shapes first, then closest to image
+      potentialShapes.sort((a, b) => {
+        const aSelectable = a.selectable !== false ? 1 : 0;
+        const bSelectable = b.selectable !== false ? 1 : 0;
+        if (aSelectable !== bSelectable) return bSelectable - aSelectable;
+        return 0; // Keep original order if same selectability
+      });
       
-      for (const shape of shapes as any[]) {
-        const shapeBounds = (shape as any).getBoundingRect();
+      const imageBounds = img.getBoundingRect();
+      let maxOverlap = 0;
+      let closestDistance = Infinity;
+      
+      for (const shape of potentialShapes) {
+        const shapeBounds = shape.getBoundingRect();
         
         const overlapLeft = Math.max(imageBounds.left, shapeBounds.left);
         const overlapTop = Math.max(imageBounds.top, shapeBounds.top);
@@ -1092,23 +1153,32 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     
     try {
-      const imgElement = (activeObject as any).getElement();
+      const imgElement = img.getElement();
+      if (!imgElement) {
+        toast.error('Could not access image element');
+        return;
+      }
+      
       const tempCanvas = document.createElement('canvas');
       const ctx = tempCanvas.getContext('2d');
-      if (!ctx) return;
+      if (!ctx) {
+        toast.error('Could not create canvas context');
+        return;
+      }
       
       let shapeWidth: number, shapeHeight: number;
       
-      if ((shapeToFill as any).type === 'circle') {
-        shapeWidth = shapeHeight = (((shapeToFill as any).radius || 0) * 2 * ((shapeToFill as any).scaleX || 1));
-      } else if ((shapeToFill as any).type === 'text' || (shapeToFill as any).type === 'textbox') {
-        const bounds = (shapeToFill as any).getBoundingRect();
-        const padding = Math.max(20, (((shapeToFill as any).fontSize || 20) * 0.2));
+      if (shapeToFill.type === 'circle') {
+        const radius = (shapeToFill.radius || 0) * (shapeToFill.scaleX || 1);
+        shapeWidth = shapeHeight = radius * 2;
+      } else if (shapeToFill.type === 'text' || shapeToFill.type === 'textbox') {
+        const bounds = shapeToFill.getBoundingRect();
+        const padding = Math.max(20, ((shapeToFill.fontSize || 20) * 0.2));
         shapeWidth = bounds.width + padding * 2;
         shapeHeight = bounds.height + padding * 2;
       } else {
-        shapeWidth = (((shapeToFill as any).width || 100) * ((shapeToFill as any).scaleX || 1));
-        shapeHeight = (((shapeToFill as any).height || 100) * ((shapeToFill as any).scaleY || 1));
+        shapeWidth = ((shapeToFill.width || 100) * (shapeToFill.scaleX || 1));
+        shapeHeight = ((shapeToFill.height || 100) * (shapeToFill.scaleY || 1));
       }
       
       tempCanvas.width = shapeWidth;
@@ -1121,9 +1191,9 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         repeat: 'no-repeat'
       });
       
-      (shapeToFill as any).set('fill', pattern);
-      canvas.remove(activeObject as any);
-      canvas.setActiveObject(shapeToFill as any);
+      shapeToFill.set('fill', pattern);
+      canvas.remove(img);
+      canvas.setActiveObject(shapeToFill);
       
       canvas.renderAll();
       updateLayers();
@@ -1131,8 +1201,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       toast.success('Shape filled with image!');
       
     } catch (error) {
-      console.error('Fill shape error:', error);
-      toast.error('Failed to fill shape with image');
+      console.error('[Fill Shape] Error:', error);
+      toast.error('Failed to fill shape with image: ' + (error.message || 'Unknown error'));
     }
   }, [canvas, activeObject, updateLayers, saveToHistory]);
 

@@ -206,12 +206,7 @@ export const defaultTextProperties = {
 // Export key types and helper functions
 export const applyTextEffect = (textObject, effectName) => {
   const effect = textEffectPresets[effectName];
-  if (!effect || !textObject) {
-    console.warn('[Text Effect] Missing effect or textObject:', { effectName, effect, textObject });
-    return;
-  }
-
-  console.log('[Text Effect] Applying effect:', effectName, 'to text:', textObject);
+  if (!effect || !textObject) return;
 
   // Check if current fill is a gradient (preserve it)
   const currentFill = textObject.get('fill');
@@ -219,8 +214,6 @@ export const applyTextEffect = (textObject, effectName) => {
 
   Object.keys(effect.properties).forEach(key => {
     const value = effect.properties[key];
-    
-    console.log('[Text Effect] Applying property:', key, '=', value);
 
     if (key === 'shadow') {
       if (value) {
@@ -278,26 +271,18 @@ export const applyTextEffect = (textObject, effectName) => {
           colorStops: (value.colorStops || []).map((s) => ({ offset: s.offset, color: s.color }))
         });
         textObject.set('fill', gradient);
-        console.log('[Text Effect] Applied gradient fill');
-      } else if (!isCurrentFillGradient && value) {
+      } else if (!isCurrentFillGradient) {
         // Effect provides a solid color and current fill is not a gradient - apply it
         textObject.set(key, value);
-        console.log('[Text Effect] Applied solid color fill:', value);
-      } else {
-        console.log('[Text Effect] Skipped fill (preserving existing gradient)');
       }
       // If current fill IS a gradient and effect provides a solid color, skip it (preserve gradient)
     } else {
       // For all other properties (stroke, strokeWidth, backgroundColor, etc.), always apply
-      if (value !== undefined && value !== null) {
-        textObject.set(key, value);
-        console.log('[Text Effect] Applied property:', key, '=', value);
-      }
+      textObject.set(key, value);
     }
   });
 
   textObject.set('dirty', true);
-  console.log('[Text Effect] Effect applied successfully');
 };
 
 export const textHeadingPresets = {
