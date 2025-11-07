@@ -7,7 +7,16 @@ import logging
 import os
 
 app = Flask(__name__)
-CORS(app)
+# Configure CORS to allow requests from frontend and specific IPs
+CORS(app, origins=[
+    'http://localhost:3000',
+    'https://threeyuga-editor.onrender.com',
+    'http://52.41.36.82',
+    'http://54.191.253.12', 
+    'http://44.226.122.3',
+    'http://74.220.48.*',
+    'http://74.220.56.*'
+])
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
