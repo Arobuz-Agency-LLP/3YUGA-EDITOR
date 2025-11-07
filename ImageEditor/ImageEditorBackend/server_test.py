@@ -43,4 +43,9 @@ def remove_bg():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
-    app.run(debug=False, host='0.0.0.0', port=port)
+    logger.info(f'Starting server on port {port}')
+    try:
+        app.run(debug=False, host='0.0.0.0', port=port)
+    except Exception as e:
+        logger.error(f'Failed to start server: {e}')
+        raise
