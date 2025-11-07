@@ -419,7 +419,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.error('Background removal failed:', error);
       
       if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
-        toast.error('Cannot connect to the backend API. Please ensure the Flask server is running on http://localhost:5000');
+        toast.error('Cannot connect to the backend API. Please ensure the Flask server is running on http://localhost:5001');
       } else if (error.message?.includes('API error')) {
         toast.error(`Backend API error: ${error.message}`);
       } else {
@@ -1170,7 +1170,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     
     try {
-      const imgElement = activeObject.getElement();
+      const imgElement = (activeObject as any).getElement();
       if (!imgElement) {
         toast.error('Could not access image element');
         return;
@@ -1364,7 +1364,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     
     try {
       // Get the image element and create a canvas to extract image data
-      const imgElement = activeObject.getElement();
+      const imgElement = (activeObject as any).getElement();
       const tempCanvas = document.createElement('canvas');
       const ctx = tempCanvas.getContext('2d');
       if (!ctx || !imgElement) {

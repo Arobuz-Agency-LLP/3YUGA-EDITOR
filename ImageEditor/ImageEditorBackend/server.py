@@ -438,11 +438,6 @@ def integrate_text():
 
 if __name__ == '__main__':
     logger.info('Starting Rembg backend server...')
-    initialize_models()
-    try:
-        logger.info('Initializing SAM model for segmentation...')
-        get_session('sam')
-        logger.info('SAM model initialized successfully')
-    except Exception as e:
-        logger.warning(f'Could not initialize SAM model: {e}. Will use fallback segmentation.')
-    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+    # Skip model initialization at startup to prevent restart loops
+    # Models will be loaded on-demand when first requested
+    app.run(debug=False, host='0.0.0.0', port=5001, threaded=True)

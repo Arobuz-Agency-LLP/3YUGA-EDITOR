@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: image-editor-backend
+    env: python
+    buildCommand: pip install -r requirements_test.txt
+    startCommand: python server_test.py

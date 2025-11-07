@@ -1,7 +1,7 @@
 import { toast } from 'sonner';
 import * as fabric from 'fabric';
 
-const BACKEND_URL = 'http://localhost:5000';
+const BACKEND_URL = 'http://localhost:5001';
 
 export const handleImageUpload = async (file, canvas, updateLayers, saveToHistory) => {
   if (!file || !canvas) return;
@@ -266,40 +266,6 @@ export const updateOCRTextProperty = (activeObject, property, value, canvas, sav
 };
 
 export const processImageForEditing = async (imageObject, canvas, updateLayers, saveToHistory) => {
-  try {
-    if (!imageObject || imageObject.isBackgroundImage) return;
-
-    // Export the image to a blob
-    const imgElement = imageObject.getElement();
-    if (!imgElement) {
-      toast.error('Could not get image element');
-      return;
-    }
-
-    // Create a temporary canvas to export the image
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = imgElement.width || imageObject.width;
-    tempCanvas.height = imgElement.height || imageObject.height;
-    const ctx = tempCanvas.getContext('2d');
-    
-    if (!ctx) {
-      toast.error('Could not create canvas context');
-      return;
-    }
-
-    ctx.drawImage(imgElement, 0, 0);
-    
-    // Convert to blob
-    const blob = await new Promise((resolve) => {
-      tempCanvas.toBlob((blob) => resolve(blob), 'image/png');
-    });
-
-    if (!blob) {
-      toast.error('Could not export image');
-      return;
-    }
-
-export const processImageForEditing = async (imageObject, canvas, updateLayers, saveToHistory) => {
   if (!imageObject || !canvas || imageObject.type !== 'image') {
     throw new Error('Please select a valid image');
   }
@@ -417,104 +383,6 @@ export const processImageForEditing = async (imageObject, canvas, updateLayers, 
   }
 };
 
-export const integrateTextToImage = async (imageObject, canvas, textEdits, updateLayers, saveToHistory) => {
-  if (!imageObject || !canvas || imageObject.type !== 'image') {
-    throw new Error('Please select a valid image');
-  }
-
-  try {
-    toast.loading('Integrating text edits...');
-
-    // Get image element and convert to blob
-    const imgElement = imageObject.getElement();
-    if (!imgElement) {
-      throw new Error('Could not access image element');
-    }
-
-    // Convert image to blob for upload
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = imgElement.naturalWidth || imgElement.width;
-    tempCanvas.height = imgElement.naturalHeight || imgElement.height;
-    const ctx = tempCanvas.getContext('2d');
-    ctx.drawImage(imgElement, 0, 0);
-    
-    tempCanvas.toBlob(async (blob) => {
-      if (!blob) {
-        throw new Error('Failed to convert image to blob');
-      }
-
-      // Create FormData
-      const formData = new FormData();
-      formData.append('image', blob, 'image.png');
-      formData.append('textEdits', JSON.stringify(textEdits));
-
-      // Send to backend
-      const response = await fetch(`${BACKEND_URL}/integrate-text`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to integrate text');
-      }
-
-      const data = await response.json();
-      
-      // Replace the image with the integrated version
-      if (data.integratedImage) {
-        const img = await fabric.FabricImage.fromURL(data.integratedImage, { crossOrigin: 'anonymous' });
-        
-        // Preserve original position and scale
-        const originalLeft = imageObject.left || 0;
-        const originalTop = imageObject.top || 0;
-        const originalScaleX = imageObject.scaleX || 1;
-        const originalScaleY = imageObject.scaleY || 1;
-        const originalAngle = imageObject.angle || 0;
-        
-        // Calculate scale to match original image size
-        const scaleX = (imageObject.width * originalScaleX) / img.width;
-        const scaleY = (imageObject.height * originalScaleY) / img.height;
-        
-        img.set({
-          left: originalLeft,
-          top: originalTop,
-          scaleX: scaleX,
-          scaleY: scaleY,
-          angle: originalAngle,
-          selectable: imageObject.selectable !== false,
-          evented: imageObject.evented !== false,
-          originX: imageObject.originX || 'left',
-          originY: imageObject.originY || 'top'
-        });
-
-        // Remove original image and OCR text overlays
-        canvas.getObjects().forEach(obj => {
-          if (obj.isOCRText || obj === imageObject) {
-            canvas.remove(obj);
-          }
-        });
-        
-        // Add integrated image
-        canvas.add(img);
-        canvas.setActiveObject(img);
-      }
-
-      canvas.renderAll();
-      updateLayers();
-      saveToHistory();
-
-      toast.dismiss();
-      toast.success('Text integrated successfully!');
-    }, 'image/png');
-
-  } catch (error) {
-    console.error('Image processing error:', error);
-    toast.error('Failed to process image', {
-      description: error.message
-    });
-  }
-};
-
 export const integrateTextToImage = async (imageObject, canvas, updateLayers, saveToHistory) => {
   if (!imageObject || !canvas || imageObject.type !== 'image') {
     throw new Error('Invalid image object');
@@ -544,25 +412,68 @@ export const integrateTextToImage = async (imageObject, canvas, updateLayers, sa
     });
 
     // Export the base image to a blob
-    const imgElement = imageObject.getElement();
-    if (!imgElement) {
-      throw new Error('Could not get image element');
+    // Try to get the image element, with fallback to using toDataURL
+    let imgElement = null;
+    try {
+      if (typeof imageObject.getElement === 'function') {
+        imgElement = imageObject.getElement();
+      }
+    } catch (e) {
+      // If getElement doesn't exist or throws an error, try alternative approach
+      console.warn('Could not get image element:', e);
     }
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = imgElement.width || imageObject.width;
-    tempCanvas.height = imgElement.height || imageObject.height;
-    const ctx = tempCanvas.getContext('2d');
+    let blob;
     
-    if (!ctx) {
-      throw new Error('Could not create canvas context');
-    }
+    if (imgElement) {
+      // Use image element if available
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = imgElement.width || imageObject.width;
+      tempCanvas.height = imgElement.height || imageObject.height;
+      const ctx = tempCanvas.getContext('2d');
+      
+      if (!ctx) {
+        throw new Error('Could not create canvas context');
+      }
 
-    ctx.drawImage(imgElement, 0, 0);
-    
-    const blob = await new Promise((resolve) => {
-      tempCanvas.toBlob((blob) => resolve(blob), 'image/png');
-    });
+      ctx.drawImage(imgElement, 0, 0);
+      
+      blob = await new Promise((resolve) => {
+        tempCanvas.toBlob((blob) => resolve(blob), 'image/png');
+      });
+    } else {
+      // Fallback: try to access _element property or use toDataURL
+      if (imageObject._element && imageObject._element instanceof HTMLImageElement) {
+        // Use the internal element if available
+        imgElement = imageObject._element;
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = imgElement.width || imageObject.width;
+        tempCanvas.height = imgElement.height || imageObject.height;
+        const ctx = tempCanvas.getContext('2d');
+        
+        if (ctx) {
+          ctx.drawImage(imgElement, 0, 0);
+          blob = await new Promise((resolve) => {
+            tempCanvas.toBlob((blob) => resolve(blob), 'image/png');
+          });
+        }
+      }
+      
+      // If still no blob, try toDataURL as last resort
+      if (!blob && imageObject.toDataURL) {
+        try {
+          const dataURL = imageObject.toDataURL({ format: 'png', quality: 1 });
+          const response = await fetch(dataURL);
+          blob = await response.blob();
+        } catch (e) {
+          console.warn('toDataURL fallback failed:', e);
+        }
+      }
+      
+      if (!blob) {
+        throw new Error('Could not access image element or convert to blob');
+      }
+    }
 
     if (!blob) {
       throw new Error('Could not export image');
@@ -571,7 +482,7 @@ export const integrateTextToImage = async (imageObject, canvas, updateLayers, sa
     // Send to backend
     const formData = new FormData();
     formData.append('image', blob);
-    formData.append('text_edits', JSON.stringify(textEdits));
+    formData.append('textEdits', JSON.stringify(textEdits));
 
     const response = await fetch(`${BACKEND_URL}/integrate-text`, {
       method: 'POST',
@@ -631,11 +542,6 @@ export const integrateTextToImage = async (imageObject, canvas, updateLayers, sa
     
     return integratedImg;
   } catch (error) {
-    console.error('Text integration error:', error);
-    toast.error('Failed to integrate text', {
-      description: error.message
-    });
-    throw error;
     console.error('Text integration error:', error);
     toast.dismiss();
     toast.error('Failed to integrate text', {
